@@ -1,15 +1,12 @@
 import csv
 import random
 from PIL import Image
-import typing as tp
 from pathlib import Path
 
-import cv2
 import torch as tch
 import pandas as pd
-import numpy as np
 from torch.utils.data import Dataset
-import albumentations as A
+import torchvision.transforms.v2.functional as F
 
 import utils as utl
 from transforms import CustomTransforms
@@ -19,14 +16,14 @@ class CustomDataset(Dataset):
     def __init__(self, csv_path: Path, train: bool=False) -> None:
         split = "train" if train else "test"
         paths = pd.read_csv(csv_path)
-        self.compos_paths = paths[paths["split"] == split]
+        self.compos_paths = paths[paths["split"] == split].reset_index(drop=True)
         self.transforms = CustomTransforms
 
     def composite(self, 
                   orig_path: Path, 
                   trim_path: Path,
                   msk_path: Path, 
-                  bg_path: Path) -> tch.Tensor:
+                  bg_path: Path) -> tuple[tch.Tensor, tch.Tensor]:
         """Creates a composite image by cutting out the foreground using the mask,
         placing it on a random position on the background, and attaching the
         trimap as an additional (4th) channel.
@@ -45,48 +42,87 @@ class CustomDataset(Dataset):
             bg_path   (Path): Path to the background image (RGBA expected)
 
         Returns:
-            torch.Tensor: Composite image in (H, W, 4) format, float32 or uint8
-                        depending on the input images.
+            tuple[tch.Tensor, tch.Tensor]: 
+                - Composite image in (H, W, 4) format, float32 or uint8
+                    depending on the input images.
+                - The mask of the foreground image.
+            
         """
         orig = Image.open(orig_path).convert("RGBA")
         trim = Image.open(trim_path).convert("L")
         mask = Image.open(msk_path).convert("L")
         bg = Image.open(bg_path).convert("RGBA")
 
-        w_bg, h_bg = bg.size
-        w_orig, h_orig = orig.size
+        # Apply the transformations to foreground image, trimap and mask
+        orig_rot, trim_rot, mask_rot = self.transforms.random_rotate(orig, trim, mask, prob=0.6)
+        orig_hfl, trim_hfl, mask_hfl = self.transforms.random_hflip(orig_rot, trim_rot, mask_rot, 0.7)
+        orig_scl, trim_scl, mask_scl = self.transforms.random_scale(orig_hfl, trim_hfl, mask_hfl, prob=0.6)
 
-        scale_rate = min(w_bg / w_orig, h_bg / h_orig, 1.0)
+        w_bg, h_bg = bg.size
+        w_orig, h_orig = orig_scl.size
+
+        scale_rate = min(1.0, w_bg / w_orig, h_bg / h_orig)
         if scale_rate < 1.0:
+            # If the scale rate < 1.0, so we need to resize the orig, trimap and mask to fit it in the background 
             new_h = int(h_orig * scale_rate)
             new_w = int(w_orig * scale_rate)
-            orig = orig.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            orig_scl = orig_scl.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            trim_scl = trim_scl.resize((new_w, new_h), Image.Resampling.NEAREST)
+            mask_scl = mask_scl.resize((new_w, new_h), Image.Resampling.NEAREST)
             w_orig, h_orig = new_w, new_h
         
         x_rand = random.randint(0, w_bg - w_orig)
         y_rand = random.randint(0, h_bg - h_orig)
 
         cut = Image.new("RGBA", size=(w_orig, h_orig))
+        cut.paste(orig_scl, (0, 0), mask_scl)
+        bg.paste(cut, (x_rand, y_rand), mask_scl)
         
-        orig_rot, trim_rot, mask_rot = self.transforms.random_rotate(orig, trim, mask)
+        # Paste the trimap and mask to the background template
+        trim_big = Image.new("L", bg.size, color=0)
+        trim_big.paste(trim_scl, (x_rand, y_rand))
+
+        mask_big = Image.new("L", bg.size, color=0)
+        mask_big.paste(mask_scl, (x_rand, y_rand))
         
+        # Convert it to tensors
+        bg_t, trim_t, mask_t = F.pil_to_tensor(bg), F.pil_to_tensor(trim_big), F.pil_to_tensor(mask_big)
 
-        cut.paste(orig, (0, 0), mask)
+        comp_crop, trim_crop, mask_crop = self.transforms.random_gray_crop(bg_t, trim_t, mask_t)
 
-        bg.paste(cut, (x_rand, y_rand), mask)
+        final = tch.cat((comp_crop, trim_crop), dim=0)
 
-        bg_np = np.array(bg)
-        trim_np = np.array(trim)
-
-        final = np.dstack([bg_np[:, :, :3], trim_np])
-
-        return tch.from_numpy(final)
+        return final, mask_crop
+    
+    def save_debug_tensor(self, t: tch.Tensor, path: Path):
+        """
+        Saves tensor (C, H, W) as image. 
+        Assumes first 3 channels are RGB in [0, 255].
+        """
+        t = t.detach().cpu().clamp(0, 255).to(tch.uint8)
+        img = F.to_pil_image(t[:3])  # только RGB
+        img.save(path)
     
     def __len__(self) -> int:
         return len(self.compos_paths)
     
-    def __getitem__(self, index) -> tch.Tensor:
-        pass
+    def __getitem__(self, index) -> tuple[tch.Tensor, tch.Tensor]:
+        row = self.compos_paths.iloc[index]
+        
+        orig = Path(row["original"])
+        trim = Path(row["trimap"])
+        mask = Path(row["mask"])
+        bg = Path(row["background"])
+        print(orig)
+        compos, mask = self.composite(orig, trim, mask, bg)
+
+        comp_path = Path(__file__).parent / "comp.jpg"
+        mask_path = Path(__file__).parent / "mask.jpg"
+
+        self.save_debug_tensor(compos, comp_path)
+        self.save_debug_tensor(mask, mask_path)
+
+        return compos, mask
         
         
 
@@ -180,8 +216,8 @@ def prepare_labels(fg_path: Path,
 
 
 if __name__ == "__main__":
-    fg_path = Path(__file__).parent / "AIM-500"
-    bg_path = Path(__file__).parent / "BG20K"
+    fg_path = Path(__file__).parent / "dataset" / "AIM-500"
+    bg_path = Path(__file__).parent / "dataset" / "BG20K"
     output_path = Path(__file__).parent / "dataset_labels.csv"
 
     prepare_labels(fg_path, bg_path, output_path)

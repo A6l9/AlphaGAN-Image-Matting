@@ -1,9 +1,7 @@
 import random
 
-import numpy as np
 import torch as tch
 from PIL import Image
-from torchvision.transforms.v2 import functional as F
 
 
 class CustomTransforms:
@@ -26,7 +24,7 @@ class CustomTransforms:
                          trim: tch.Tensor, 
                          mask: tch.Tensor, 
                          crop_size: int=256,
-                         prob: float=0.5) -> tuple[tch.Tensor, tch.Tensor]:
+                         prob: float=1.0) -> tuple[tch.Tensor, tch.Tensor, tch.Tensor]:
         """
         Crops a random `crop_size x crop_size` region from the composite and mask tensors.
         The crop is centered around a randomly chosen pixel belonging to the gray (128)
@@ -43,16 +41,17 @@ class CustomTransforms:
             ValueError: If the trimap contains no gray (128) region.
 
         Returns:
-            tuple[tch.Tensor, tch.Tensor]:
+            tuple[tch.Tensor, tch.Tensor, tch.Tensor]:
                 - Cropped composite tensor of shape (C, crop_size, crop_size).
+                - Cropped trimap tensor of shape (C, crop_size, crop_size).
                 - Cropped mask tensor of shape (C, crop_size, crop_size).
         """
         if not cls.random_apply(prob):
-            return compos, mask
+            return compos, trim, mask
         
-        h, w = trim.shape
+        _, h, w = trim.shape
 
-        yt, xt = (trim == 128).nonzero(as_tuple=True)
+        _, yt, xt = (trim == 128).nonzero(as_tuple=True)
 
         if len(xt) == 0:
             raise ValueError("Trimap has no gray (128) region.")
@@ -67,9 +66,10 @@ class CustomTransforms:
         y_left = max(0, min(y_left, h - crop_size))
 
         crop_comp = compos[:, y_left:y_left + crop_size, x_left:x_left + crop_size]
+        crop_trim = trim[:, y_left:y_left + crop_size, x_left:x_left + crop_size]
         crop_mask = mask[:, y_left:y_left + crop_size, x_left:x_left + crop_size]
 
-        return crop_comp, crop_mask
+        return crop_comp, crop_trim, crop_mask
 
     @classmethod
     def random_rotate(cls,
