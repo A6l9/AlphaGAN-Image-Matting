@@ -1,18 +1,29 @@
+from pathlib import Path
+
 import torch as tch
 
 from models import AlphaGenerator
 import utils as utl
+from dataset import CustomDataset
 
 
 def main() -> None:
-    model = AlphaGenerator()
+    csv_path = Path(__file__).parent / "dataset" / "dataset_labels.csv"
 
-    utl.set_seed()
+    dataset = CustomDataset(csv_path, train=True)
 
-    x = tch.randn(1, 3, 1024, 1024)
+    sample, mask = dataset[75]
 
-    with tch.no_grad():
-        out = model(x)
+    print(sample.shape)
+    print(mask.shape)
+    # model = AlphaGenerator()
+
+    # utl.set_seed()
+
+    # x = tch.randn(1, 3, 1024, 1024)
+
+    # with tch.no_grad():
+    #     out = model(x)
 
 
 if __name__ == "__main__":
