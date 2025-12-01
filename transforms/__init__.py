@@ -1,1 +1,1 @@
-from .custom_transforms import CustomTransforms
+from .trans_pipeline import TransformsPipeline
