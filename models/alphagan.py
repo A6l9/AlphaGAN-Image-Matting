@@ -42,7 +42,7 @@ class Encoder(nn.Module):
         self.layer3 = resnet.layer3
         self.layer4 = resnet.layer4
     
-    def forward(self, x) -> tuple[tch.Tensor, tch.Tensor, tch.Tensor]:
+    def forward(self, x: tch.Tensor) -> tuple[tch.Tensor, tch.Tensor, tch.Tensor]:
         x0 = self.layer0(x)
         x1 = self.layer1(x0)
         x2 = self.layer2(x1)
@@ -83,7 +83,7 @@ class Decoder(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x, skip0, skip2) -> tch.Tensor:
+    def forward(self, x: tch.Tensor, skip0: tch.Tensor, skip2: tch.Tensor) -> tch.Tensor:
         x = tch.cat([x, skip2], dim=1)
         x = self.upsample1(x)
 
@@ -104,7 +104,7 @@ class AlphaGenerator(nn.Module):
         self.aspp = ASPP()
         self.decoder = Decoder()
     
-    def forward(self, x) -> tch.Tensor:
+    def forward(self, x: tch.Tensor) -> tch.Tensor:
         x, skip0, skip2 = self.encoder(x)
         x = self.aspp(x)
         x = self.decoder(x, skip0, skip2)
