@@ -3,9 +3,19 @@ general:
   mean: [0.485, 0.456, 0.406]
   std: [0.229, 0.224, 0.225]
   batch_size: 5
+  checkpoints_dir: checkpoints/
 
 train:
   crop_size: 256
+  scheduler:
+    start_lr: 1e-5
+    end_lr: 1e-3
+    step_size_up: 2000
+  optimizer:
+    weight_decay: 5e-4
+  logging:
+    log_dir: tb_logger/
+  epoches: 5000
 
 test:
   resize_size: 256
