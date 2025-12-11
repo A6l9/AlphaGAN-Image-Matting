@@ -1,10 +1,10 @@
-import torch
+import torch as tch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class ASPP(nn.Module):
-    def __init__(self, in_ch: int=2048, out_ch: int=256, rates: tuple=(1,12,24,36)):
+    def __init__(self, in_ch: int=2048, out_ch: int=256, rates: tuple=(1,12,24,36)) -> None:
         super().__init__()
         self.branches = nn.ModuleList([
             nn.Sequential(
@@ -32,10 +32,11 @@ class ASPP(nn.Module):
             nn.Dropout(0.5)
         )
 
-    def forward(self, x):
+    def forward(self, x: tch.Tensor) -> tch.Tensor:
         size = x.shape[2:]
         outs = [b(x) for b in self.branches]
         g = self.global_pool(x)
         g = F.interpolate(g, size=size, mode='bilinear', align_corners=False)
         outs.append(g)
-        return self.project(torch.cat(outs, dim=1))
+
+        return self.project(tch.cat(outs, dim=1))
