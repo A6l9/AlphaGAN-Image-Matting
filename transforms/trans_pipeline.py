@@ -23,7 +23,7 @@ class TransformsPipeline:
             bg (tch.Tensor): Background image as a tensor
 
         Returns:
-            dict: The prepared composite, trimap and mask
+            dict: The prepared composite, trimap, mask, foreground image and background
         """
         orig_rot, trim_rot, mask_rot = cls.geom_tfs.random_rotate(orig, trim, mask, prob=0.6)
         orig_scl, trim_scl, mask_scl = cls.geom_tfs.random_scale(orig_rot, trim_rot, mask_rot, prob=0.6)
@@ -40,7 +40,9 @@ class TransformsPipeline:
         return {
             "compos": compos_norm,
             "trim": compos_norm[3:],
-            "mask": mask_norm
+            "mask": mask_norm,
+            "orig": orig,
+            "bg": bg
         }
 
     @classmethod
@@ -54,16 +56,18 @@ class TransformsPipeline:
             bg (tch.Tensor): Background image as a tensor
 
         Returns:
-            dict: The prepared composite, trimap and mask
+            dict: The prepared orig, trimap and mask
         """
-        orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig, trim, mask, bg)
-        compos, trim_comp, mask_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg)
+        orig_res = cls.geom_tfs.resize(orig, T.InterpolationMode.BILINEAR)
+        trim_res = cls.geom_tfs.resize(trim, T.InterpolationMode.NEAREST)
+        mask_res = cls.geom_tfs.resize(mask, T.InterpolationMode.BILINEAR)
+        bg_res = cls.geom_tfs.resize(bg, T.InterpolationMode.BILINEAR)
 
-        compos_res = cls.geom_tfs.resize(compos, T.InterpolationMode.BILINEAR)
-        trim_res = cls.geom_tfs.resize(trim_comp, T.InterpolationMode.NEAREST)
-        mask_res = cls.geom_tfs.resize(mask_comp, T.InterpolationMode.NEAREST)
-        compos_trim = cls.compos_tfs.concat_image_and_trimap(compos_res, trim_res)
-        compos_norm, mask_norm = cls.norm_tfs.normalize(compos_trim, mask_res)
+        orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_res, trim_res, mask_res, bg_res)
+        compos, trim_comp, mask_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg_res)
+
+        compos_trim = cls.compos_tfs.concat_image_and_trimap(compos, trim_comp)
+        compos_norm, mask_norm = cls.norm_tfs.normalize(compos_trim, mask_comp)
 
         return {
             "compos": compos_norm,
@@ -90,7 +94,6 @@ class TransformsPipeline:
             mask (Image.Image): Mask PIL image (mode "L").
             bg (Image.Image): Background RGB PIL image.
             train (bool, optional): If True.
-                Defaults to 0.5.
 
         Returns:
             dict: A dictionary with keys:
