@@ -27,16 +27,15 @@ def main(csv_path: Path) -> None:
     # Define an available device
     DEVICE = tch.device("cuda" if tch.cuda.is_available() else "cpu")
     
-    # Define model and dicsriminator
-    model = mdl.AlphaGenerator()
-    model.to(DEVICE)
+    # Define generator and dicsriminator
+    generator = mdl.AlphaGenerator()
+    generator.to(DEVICE)
 
     discriminator = mdl.PatchGANDiscriminator(4, nn.BatchNorm2d)
     discriminator.to(DEVICE)
 
     # Prepare train and test datasets
-    tfs = TransformsPipeline()
-    dataset_train = CustomDataset(csv_path, cfg, train=True, transforms=tfs)
+    dataset_train = CustomDataset(csv_path, train=True, transforms=TransformsPipeline)
     train_dataloader = DataLoader(
         dataset_train,
         batch_size=cfg.general.batch_size,
@@ -44,7 +43,7 @@ def main(csv_path: Path) -> None:
         num_workers=utl.get_num_workers(),
         pin_memory=True
     )
-    dataset_test = CustomDataset(csv_path, cfg, train=False, transforms=tfs)
+    dataset_test = CustomDataset(csv_path, train=False, transforms=TransformsPipeline)
     test_dataloader = DataLoader(
         dataset_test,
         batch_size=cfg.general.batch_size,
@@ -53,27 +52,27 @@ def main(csv_path: Path) -> None:
         pin_memory=True
     )
 
-    # Define optimizer and scheduler for the discriminator and the model
-    g_optimizer = optim.AdamW(model.parameters(),
-                            lr=cfg.train.scheduler.start_lr,
-                            weight_decay=cfg.train.optimizer.weight_decay
+    # Define optimizer and scheduler for the discriminator and the generator
+    g_optimizer = optim.AdamW(generator.parameters(),
+                            lr=float(cfg.train.scheduler.start_lr),
+                            weight_decay=float(cfg.train.optimizer.weight_decay)
                             )
     g_scheduler = CyclicLR(
                         g_optimizer,
-                        base_lr=cfg.train.scheduler.start_lr,
-                        max_lr=cfg.train.scheduler.end_lr, 
+                        base_lr=float(cfg.train.scheduler.start_lr),
+                        max_lr=float(cfg.train.scheduler.end_lr), 
                         step_size_up=cfg.train.scheduler.step_size_up,
                         mode='triangular'
                     )
     
     d_optimizer = optim.AdamW(discriminator.parameters(),
-                            lr=cfg.train.scheduler.start_lr,
-                            weight_decay=cfg.train.optimizer.weight_decay
+                            lr=float(cfg.train.scheduler.start_lr),
+                            weight_decay=float(cfg.train.optimizer.weight_decay)
                             )
     d_scheduler = CyclicLR(
                         d_optimizer,
-                        base_lr=cfg.train.scheduler.start_lr,
-                        max_lr=cfg.train.scheduler.end_lr, 
+                        base_lr=float(cfg.train.scheduler.start_lr),
+                        max_lr=float(cfg.train.scheduler.end_lr), 
                         step_size_up=cfg.train.scheduler.step_size_up,
                         mode='triangular'
                     )
@@ -90,9 +89,9 @@ def main(csv_path: Path) -> None:
     checkpoint = utl.load_checkpoint(checkpoints_dir, DEVICE)
 
     if checkpoint:
-        utl.color("Checkpoint found, loading states...", "green")
+        print(utl.color("Checkpoint found, loading states...", "green"))
 
-        model.load_state_dict(checkpoint["model_state"])
+        generator.load_state_dict(checkpoint["model_state"])
         discriminator.load_state_dict(checkpoint["discriminator_state"])
 
         g_optimizer.load_state_dict(checkpoint["g_optimizer_state"])
@@ -103,32 +102,32 @@ def main(csv_path: Path) -> None:
 
         curr_epoch = checkpoint["epoch"] + 1
     else:
-        utl.color("No checkpoint found, starting from scratch.", "green")
+        print(utl.color("No checkpoint found, starting from scratch.", "green"))
         curr_epoch = 0
 
     # Define progress bar
-    prog_bar = tqdm(initial=curr_epoch, total=cfg.train.epoches, unit="epoch", desc="Training...")
+    prog_bar = tqdm(iterable=enumerate(train_dataloader), unit="batch", desc="Training...", leave=True)
 
     # Create the tb logger
     with SummaryWriter(Path(cfg.train.logging.log_dir)) as writer:
         # Package it for train pipeline
-        components: TrainComponents = {
-            "device": DEVICE,
-            "model": model,
-            "epoch": curr_epoch,
-            "prog_bar": prog_bar,
-            "discriminator": discriminator,
-            "train_loader": train_dataloader,
-            "test_loader": test_dataloader,
-            "g_optimizer": g_optimizer,
-            "g_scheduler": g_scheduler,
-            "d_optimizer": d_optimizer,
-            "d_scheduler": d_scheduler,
-            "l_alpha_loss": l_alpha_loss,
-            "l_comp_loss": l_comp_loss,
-            "gan_loss": gan_loss,
-            "writer": writer
-        }
+        components = TrainComponents(
+            device=DEVICE,
+            generator=generator,
+            epoch=curr_epoch,
+            prog_bar=prog_bar,
+            discriminator=discriminator,
+            train_loader=train_dataloader,
+            test_loader=test_dataloader,
+            g_optimizer=g_optimizer,
+            g_scheduler=g_scheduler,
+            d_optimizer=d_optimizer,
+            d_scheduler=d_scheduler,
+            l_alpha_loss=l_alpha_loss,
+            l_comp_loss=l_comp_loss,
+            gan_loss=gan_loss,
+            writer=writer
+        )
 
         # Start the train pipeline
         train_pipeline(components)
