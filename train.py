@@ -2,148 +2,215 @@ from pathlib import Path
 
 import torch as tch
 
-from models import AlphaGenerator
+import models as mdl
 import utils as utl
 from dataset import CustomDataset
 from cfg_loader import cfg
 from transforms import TransformsPipeline
-from schemas import TrainComponents
+import schemas as sch
 
 
-def train_one_epoch(epoch: int, components: TrainComponents) -> Dict[str, float]:
-    """Run one training epoch for AlphaGAN (G + D)."""
-
-    device        = components["device"]
-    model         = components["model"]
-    discriminator = components["discriminator"]
-    train_loader  = components["train_loader"]
-    g_optimizer   = components["g_optimizer"]
-    g_scheduler   = components["g_scheduler"]
-    d_optimizer   = components["d_optimizer"]
-    d_scheduler   = components["d_scheduler"]
-    l_alpha_loss  = components["l_alpha_loss"]
-    l_comp_loss   = components["l_comp_loss"]
-    gan_loss      = components["gan_loss"]
-    writer        = components["writer"]
-
-    # можно хранить в cfg
-    lambda_alpha = getattr(cfg.loss, "lambda_alpha", 1.0)
-    lambda_comp  = getattr(cfg.loss, "lambda_comp", 1.0)
-    lambda_gan   = getattr(cfg.loss, "lambda_gan", 1.0)
-
-    model.train()
-    discriminator.train()
-
-    running_D = 0.0
-    running_G = 0.0
-    running_alpha = 0.0
-    running_comp = 0.0
-    running_gan = 0.0
-
-    global_step_start = epoch * len(train_loader)
-
-    for i, batch in enumerate(train_loader):
-        image    = batch["image"].to(device)
-        trimap   = batch["trimap"].to(device)
-        alpha_gt = batch["alpha_gt"].to(device)
-        fg       = batch["fg"].to(device)
-        bg       = batch["bg"].to(device)
-        comp_gt  = batch["comp_gt"].to(device)
-
-        # ========= 1) G: предсказание alpha =========
-        # если у тебя генератор принимает только image — убери trimap
-        alpha_pred = model(image, trimap)
-
-        comp_pred = alpha_pred * fg + (1.0 - alpha_pred) * bg
-
-        # ========= 2) обновляем дискриминатор =========
-        d_optimizer.zero_grad()
-
-        D_input_real = tch.cat([comp_gt, trimap], dim=1)          # (B, 4, H, W)
-        D_input_fake = tch.cat([comp_pred.detach(), trimap], dim=1)
-
-        D_real = discriminator(D_input_real)
-        D_fake = discriminator(D_input_fake)
-
-        loss_D_real = gan_loss[D_real, True]    # real → 1
-        loss_D_fake = gan_loss[D_fake, False]   # fake → 0
-        loss_D = 0.5 * (loss_D_real + loss_D_fake)
-
-        loss_D.backward()
-        d_optimizer.step()
-        d_scheduler.step()
-
-        # ========= 3) обновляем генератор =========
-        g_optimizer.zero_grad()
-
-        D_input_fake_for_G = tch.cat([comp_pred, trimap], dim=1)
-        D_fake_for_G = discriminator(D_input_fake_for_G)
-
-        loss_G_gan   = gan_loss[D_fake_for_G, True]               # хотим, чтобы fake считался real
-        loss_G_alpha = l_alpha_loss[alpha_pred, alpha_gt]
-        loss_G_comp  = l_comp_loss[alpha_pred, fg, bg, comp_gt]
-
-        loss_G = (
-            lambda_alpha * loss_G_alpha +
-            lambda_comp  * loss_G_comp  +
-            lambda_gan   * loss_G_gan
-        )
-
-        loss_G.backward()
-        g_optimizer.step()
-        g_scheduler.step()
-
-        # ========= 4) статистика и логгинг =========
-        running_D     += loss_D.item()
-        running_G     += loss_G.item()
-        running_alpha += loss_G_alpha.item()
-        running_comp  += loss_G_comp.item()
-        running_gan   += loss_G_gan.item()
-
-        global_step = global_step_start + i
-
-        if writer is not None:
-            writer.add_scalar("train/loss_D",      loss_D.item(),      global_step)
-            writer.add_scalar("train/loss_G",      loss_G.item(),      global_step)
-            writer.add_scalar("train/loss_alpha",  loss_G_alpha.item(),global_step)
-            writer.add_scalar("train/loss_comp",   loss_G_comp.item(), global_step)
-            writer.add_scalar("train/loss_gan",    loss_G_gan.item(),  global_step)
-
-    n = len(train_loader)
-    return {
-        "loss_D":      running_D / n,
-        "loss_G":      running_G / n,
-        "loss_alpha":  running_alpha / n,
-        "loss_comp":   running_comp / n,
-        "loss_gan":    running_gan / n,
-    }
+def zeroing_loss_values(loss_vals: sch.LossValues) -> None:
+    """
+    Docstring for zeroing_loss_values
+    
+    :param loss_vals: Description
+    :type loss_vals: sch.LossValues
+    """
+    loss_vals.alpha_loss = 0.0
+    loss_vals.compos_loss = 0.0
+    loss_vals.g_loss = 0.0
+    loss_vals.fake_d_loss = 0.0
+    loss_vals.real_d_loss = 0.0
+    loss_vals.d_loss = 0.0
 
 
-def train_pipeline(components: TrainComponents) -> None:
+@tch.no_grad()
+def test_one_epoch(epoch: int, loss_vals: sch.LossValues, train_comp: sch.TrainComponents) -> sch.LossValues:
+    print(utl.color("Testing...", "green"))
+
+    train_comp.generator.eval()
+
+    n_batches = 0
+    global_step_base = len(train_comp.test_loader) * epoch
+
+    for batch in train_comp.test_loader:
+        compos = batch["compos"].to(train_comp.device, non_blocking=True)
+        trim = batch["trim"].to(train_comp.device, non_blocking=True)
+        mask = batch["mask"].to(train_comp.device, non_blocking=True)
+        fg = batch["fg"].to(train_comp.device, non_blocking=True)
+        bg = batch["bg"].to(train_comp.device, non_blocking=True)
+
+        alpha_pred = train_comp.generator(compos)
+
+        pred_compos = utl.make_compos(batch, alpha_pred)
+        
+        loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
+        loss_comp = train_comp.l_comp_loss(
+            alpha=alpha_pred, 
+            fg=fg,
+            bg=bg,
+            target=compos
+            )
+
+        # Saving loss values
+        loss_vals.alpha_loss += float(loss_alpha.item())
+        loss_vals.compos_loss += float(loss_comp.item())
+
+        # Logging input/output images every 10 batches
+        if n_batches % 50 == 0:
+            utl.log_matting_inputs_outputs(
+                compos[:, :4, ...],
+                trim,
+                mask,
+                pred_compos,
+                trim,
+                alpha_pred,
+                "test/input|output",
+                global_step_base,
+                train_comp.writer
+            )
+        
+        n_batches += 1
+
+    # Logging loss values
+    utl.log_loss(epoch, loss_vals.alpha_loss / len(train_comp.train_loader), f"test/alpha_loss", train_comp.writer)
+    utl.log_loss(epoch, loss_vals.compos_loss / len(train_comp.train_loader), f"test/compos_loss", train_comp.writer)
+    
+    return loss_vals
+
+
+def train_one_epoch(epoch: int, loss_vals: sch.LossValues, train_comp: sch.TrainComponents) -> sch.LossValues:
     """_summary_
 
     Args:
-        components (dict): _description_
+        epoch (int): _description_
+        loss_vals (sch.LossValues): _description_
+        train_comp (sch.TrainComponents): _description_
+
+    Returns:
+        sch.LossValues: _description_
     """
+    train_comp.generator.train()
+    train_comp.discriminator.train()
 
-    device = components["device"]
-    model = components["model"]
-    discriminator = components["discriminator"]
-    train_loader = components["train_loader"]
-    g_optimizer = components["g_optimizer"]
-    g_scheduler = components["g_scheduler"]
-    d_optimizer = components["d_optimizer"]
-    d_scheduler = components["d_scheduler"]
-    l_alpha_loss = components["l_alpha_loss"]
-    l_comp_loss = components["l_comp_loss"]
-    gan_loss = components["gan_loss"]
-    writer = components["writer"]
+    n_batches = len(train_comp.train_loader)
+    global_step_base = n_batches * epoch
 
-    model.train()
-    discriminator.train()
+    for i, batch in train_comp.prog_bar:
+        compos = batch["compos"].to(train_comp.device, non_blocking=True)
+        trim = batch["trim"].to(train_comp.device, non_blocking=True)
+        mask = batch["mask"].to(train_comp.device, non_blocking=True)
+        fg = batch["orig"].to(train_comp.device, non_blocking=True)
+        bg = batch["bg"].to(train_comp.device, non_blocking=True)
 
-    running_D = 0.0
-    running_G = 0.0
-    running_alpha = 0.0
-    running_comp = 0.0
-    running_gan = 0.0
+
+        alpha_pred = train_comp.generator(compos)
+
+        pred_compos = utl.make_compos(batch, alpha_pred)
+
+        # Update D
+        train_comp.d_optimizer.zero_grad(set_to_none=True)
+
+        d_in_real = compos
+        d_in_fake = utl.add_trimap(pred_compos.detach(), trim)
+
+        d_real = train_comp.discriminator(d_in_real)
+        d_fake = train_comp.discriminator(d_in_fake)
+
+        loss_d_real = train_comp.gan_loss(pred=d_real, is_real=True)
+        loss_d_fake = train_comp.gan_loss(pred=d_fake, is_real=False)
+
+        loss_d = loss_d_real + loss_d_fake
+
+        loss_d.backward()
+        train_comp.d_optimizer.step()
+        train_comp.d_scheduler.step()
+
+        # Update G
+        train_comp.g_optimizer.zero_grad(set_to_none=True)
+
+        d_in_fake_for_g = utl.add_trimap(pred_compos, trim)
+        d_fake_for_g = train_comp.discriminator(d_in_fake_for_g)
+
+        loss_g_gan = train_comp.gan_loss(pred=d_fake_for_g, is_real=True)
+        loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
+        loss_comp = train_comp.l_comp_loss(
+            alpha=alpha_pred, 
+            fg=fg,
+            bg=bg,
+            target=compos
+            )
+        
+        loss_g = loss_alpha + loss_comp + loss_g_gan
+
+        loss_g.backward()
+        train_comp.g_optimizer.step()
+        train_comp.g_scheduler.step()
+
+        # Saving loss values
+        loss_vals.alpha_loss += float(loss_alpha.item())
+        loss_vals.compos_loss += float(loss_comp.item())
+        loss_vals.g_loss += float(loss_g_gan.item())
+        loss_vals.fake_d_loss += float(loss_d_fake.item())
+        loss_vals.real_d_loss += float(loss_d_real.item())
+        loss_vals.d_loss += float(loss_d.item())
+
+        # Logging learning rates every 'log_lr_n_batches' batches
+        if (i + 1) % cfg.train.logging.log_lr_n_batches == 0:
+            utl.log_lr(
+                global_step_base, 
+                train_comp.d_optimizer.param_groups[0]["lr"],
+                "D",
+                train_comp.writer
+            )
+            utl.log_lr(
+                global_step_base, 
+                train_comp.g_optimizer.param_groups[0]["lr"],
+                "G",
+                train_comp.writer
+            )
+        
+        # Logging input/output images every 'save_io_n_batches' batches
+        if (i + 1) % cfg.train.logging.log_io_n_batches == 0:
+            utl.log_matting_inputs_outputs(
+                compos[:, :4, ...],
+                trim,
+                mask,
+                pred_compos,
+                trim,
+                alpha_pred,
+                "train/input|output",
+                global_step_base,
+                train_comp.writer
+            )
+    
+    # Logging loss values
+    for key, value in loss_vals.__dict__.items():
+        utl.log_loss(epoch, value.item() / len(train_comp.train_loader), f"train/{key}", train_comp.writer)
+    
+    # Zeroing the loss values
+    zeroing_loss_values(loss_vals)
+    
+    return loss_vals
+
+
+def train_pipeline(train_comp: sch.TrainComponents) -> None:
+    """_summary_
+
+    Args:
+        train_comp (TrainComponents): _description_
+    """
+    loss_vals = sch.LossValues()
+
+    for epoch in range(train_comp.epoch + 1, cfg.train.epoches + 1):
+        train_comp.prog_bar.set_description(f"Training... epoch: {epoch}")
+
+        train_one_epoch(epoch, loss_vals, train_comp)
+        
+        # Save checkpoint every 'save_chkp_n_batches' batches
+        if epoch % cfg.train.save_chkp_n_batches == 0:
+            test_one_epoch(epoch, loss_vals, train_comp)
+
+            # Zeroing the loss values
+            zeroing_loss_values(loss_vals)
