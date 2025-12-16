@@ -6,6 +6,7 @@ general:
   checkpoints_dir: checkpoints/
 
 train:
+  save_chkp_n_batches: 50
   crop_size: 256
   scheduler:
     start_lr: 1e-5
@@ -15,6 +16,8 @@ train:
     weight_decay: 5e-4
   logging:
     log_dir: tb_logger/
+    log_io_n_batches: 10 
+    log_lr_n_batches: 50 
   epoches: 5000
 
 test:
