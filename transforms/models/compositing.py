@@ -12,7 +12,11 @@ class CompositingTransforms(BaseTransform):
                          trim: tch.Tensor,
                          mask: tch.Tensor,
                          bg: tch.Tensor
-                         ) -> tuple[tch.Tensor, tch.Tensor, tch.Tensor]:
+                         ) -> tuple[tch.Tensor, 
+                                    tch.Tensor, 
+                                    tch.Tensor, 
+                                    tch.Tensor, 
+                                    tch.Tensor]:
         """
         Randomly places the foreground onto the background.
 
@@ -62,7 +66,10 @@ class CompositingTransforms(BaseTransform):
         trim_big[:, y_rand:y_rand+h_orig, x_rand:x_rand+w_orig] = trim_obj
         mask_big[:, y_rand:y_rand+h_orig, x_rand:x_rand+w_orig] = mask_obj
 
-        return final, trim_big, mask_big
+        orig_big = tch.zeros_like(bg)
+        orig_big[:, y_rand:y_rand+h_orig, x_rand:x_rand+w_orig] = orig_obj
+
+        return final, trim_big, mask_big, orig_big, bg
 
     @staticmethod
     def concat_image_and_trimap(comp: tch.Tensor, trim: tch.Tensor) -> tch.Tensor:

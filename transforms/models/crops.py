@@ -8,9 +8,15 @@ class CropTransforms(BaseTransform):
     def random_gray_crop(cls,
                          compos: tch.Tensor, 
                          trim: tch.Tensor, 
-                         mask: tch.Tensor, 
+                         mask: tch.Tensor,
+                         orig: tch.Tensor,
+                         bg: tch.Tensor,
                          crop_size: int=256,
-                         prob: float=1.0) -> tuple[tch.Tensor, tch.Tensor, tch.Tensor]:
+                         prob: float=1.0) -> tuple[tch.Tensor, 
+                                                   tch.Tensor, 
+                                                   tch.Tensor, 
+                                                   tch.Tensor, 
+                                                   tch.Tensor]:
         """
         Crops a square region of size `crop_size` centered around a random
         pixel belonging to the unknown (gray, value 128) region in the trimap.
@@ -37,7 +43,7 @@ class CropTransforms(BaseTransform):
                 - Cropped mask tensor of shape (1, crop_size, crop_size).
         """
         if not cls.random_apply(prob):
-            return compos, trim, mask
+            return compos, trim, mask, orig, bg
         
         _, h, w = trim.shape
 
@@ -58,5 +64,7 @@ class CropTransforms(BaseTransform):
         crop_comp = compos[:, y_left:y_left + crop_size, x_left:x_left + crop_size]
         crop_trim = trim[:, y_left:y_left + crop_size, x_left:x_left + crop_size]
         crop_mask = mask[:, y_left:y_left + crop_size, x_left:x_left + crop_size]
+        crop_orig = orig[:, y_left:y_left + crop_size, x_left:x_left + crop_size]
+        crop_bg   = bg[:, y_left:y_left + crop_size, x_left:x_left + crop_size]
 
-        return crop_comp, crop_trim, crop_mask
+        return crop_comp, crop_trim, crop_mask, crop_orig, crop_bg

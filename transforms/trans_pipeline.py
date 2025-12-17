@@ -30,19 +30,28 @@ class TransformsPipeline:
         orig_fl, trim_fl, mask_fl = cls.geom_tfs.random_hflip(orig_scl, trim_scl, mask_scl, prob=0.6)
 
         orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_fl, trim_fl, mask_fl, bg)
-        compos, trim_comp, mask_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg)
+        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg)
 
-        compos_crop, trim_crop, mask_crop = cls.crop_tfs.random_gray_crop(compos, trim_comp, mask_comp, cfg.train.crop_size)
+        compos_crop, trim_crop, mask_crop, orig_crop, bg_crop = cls.crop_tfs.random_gray_crop(compos, 
+                                                                                            trim_comp, 
+                                                                                            mask_comp,
+                                                                                            orig_comp,
+                                                                                            bg_comp,
+                                                                                            cfg.train.crop_size)
 
         compos_trim = cls.compos_tfs.concat_image_and_trimap(compos_crop, trim_crop)
-        compos_norm, mask_norm = cls.norm_tfs.normalize(compos_trim, mask_crop)
+        compos_norm = cls.norm_tfs.normalize(compos_trim, imgnet=True)
+        mask_norm = cls.norm_tfs.normalize(mask_crop)
+
+        orig_norm = cls.norm_tfs.normalize(orig_crop, imgnet=True)
+        bg_norm = cls.norm_tfs.normalize(bg_crop, imgnet=True)
 
         return {
             "compos": compos_norm,
             "trim": compos_norm[3:],
             "mask": mask_norm,
-            "orig": orig,
-            "bg": bg
+            "orig": orig_norm,
+            "bg": bg_norm
         }
 
     @classmethod
@@ -64,15 +73,21 @@ class TransformsPipeline:
         bg_res = cls.geom_tfs.resize(bg, T.InterpolationMode.BILINEAR)
 
         orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_res, trim_res, mask_res, bg_res)
-        compos, trim_comp, mask_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg_res)
+        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg_res)
 
         compos_trim = cls.compos_tfs.concat_image_and_trimap(compos, trim_comp)
-        compos_norm, mask_norm = cls.norm_tfs.normalize(compos_trim, mask_comp)
+        compos_norm = cls.norm_tfs.normalize(compos_trim, imgnet=True)
+        mask_norm = cls.norm_tfs.normalize(mask_comp)
+        
+        orig_norm = cls.norm_tfs.normalize(orig_comp, imgnet=True)
+        bg_norm = cls.norm_tfs.normalize(bg_comp, imgnet=True)
 
         return {
             "compos": compos_norm,
             "trim": compos_norm[3:],
-            "mask": mask_norm
+            "mask": mask_norm,
+            "orig": orig_norm,
+            "bg": bg_norm
         }
     
     @classmethod
