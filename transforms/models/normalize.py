@@ -25,34 +25,46 @@ class NormalizeTransforms(BaseTransform):
     
     @classmethod
     def normalize(cls,
-                compos: tch.Tensor,
-                mask: tch.Tensor) -> tuple[tch.Tensor, tch.Tensor]:
-        """
-        Normalizes the composite RGB + trimap image and scales the mask to [0, 1].
+                x: tch.Tensor,
+                imgnet: bool=False
+                ) -> tch.Tensor:
+        """Scale an image-like tensor to [0, 1] and optionally apply ImageNet normalization.
 
-        - Composite is converted to float in [0, 1] and normalized
-        using ImageNet-style mean/std.
-        - Mask is converted to float in [0, 1] (assuming original [0, 255]).
+        The function always converts the input to 'float32' and scales values from
+        '[0, 255]' to '[0, 1]' via division by 255.
+
+        If 'imgnet=True':
+        - For 3-channel tensors (RGB), ImageNet mean/std normalization is applied
+            to all channels.
+        - For 4+ channel tensors where the first 3 channels are RGB (e.g. RGB + trimap),
+            ImageNet normalization is applied only to the first 3 channels, while the
+            remaining channels are kept in the '[0, 1]' range.
 
         Args:
-            compos (tch.Tensor): Composite RGB + trimap tensor of shape (4, H, W),
-                values in [0, 255].
-            mask (tch.Tensor): Mask tensor of shape (1, H, W),
-                values in [0, 255].
+            x (tch.Tensor): Input tensor, typically in CHW format. Common cases:
+                - RGB image: shape (3, H, W), values in [0, 255]
+                - Composite with trimap: shape (4, H, W), values in [0, 255]
+                The dtype can be uint8 or float; the output is always float32.
+            imgnet (bool): If True, apply ImageNet mean/std normalization to RGB channels.
+                Defaults to False.
 
         Returns:
-            Returns:
-                tuple[tch.Tensor, tch.Tensor]:
-                    - Normalized composite tensor of shape (4, H, W), float32
-                        (3 normalized RGB channels + 1 trimap channel in [0, 1]).
-                    - Mask tensor of shape (1, H, W) in [0, 1], float32.
+            tch.Tensor: Normalized tensor with the same shape as 'x':
+                - Always scaled to [0, 1]
+                - Additionally ImageNet-normalized on RGB channels when 'imgnet=True'
         """
-        # Firstly perform composite and mask to float type and range [0, 1]
-        compos = compos.float() / 255.0 
-        mask = mask.float() / 255.0
+        # Firstly perform x to float type and range [0, 1]
+        x = x.float() / 255.0
 
-        trim = compos[3:]
-        # Then perform composite to ImageNet format(only to RGB part)
-        compos_norm = (compos[:3] - cls.mean) / cls.std
+        if imgnet:
+            # Perform x to ImageNet format(only to RGB part)
+            if x.shape[0] == 3:
+                return (x - cls.mean) / cls.std
 
-        return tch.cat((compos_norm, trim), dim=0), mask
+            trim = x[3:]
+
+            x_imgnet = (x[:3] - cls.mean) / cls.std
+
+            return tch.cat((x_imgnet, trim), dim=0)
+        
+        return x
