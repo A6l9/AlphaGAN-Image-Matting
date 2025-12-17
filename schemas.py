@@ -15,7 +15,7 @@ import losses as ls
 class TrainComponents:
     device: tch.device
     epoch: int
-    prog_bar: tqdm
+    best_loss: float
     generator: nn.Module
     discriminator: nn.Module
     train_loader: DataLoader
