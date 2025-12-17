@@ -10,6 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 
 from schemas import TrainComponents
+from cfg_loader import cfg
 
 
 COLORS = {
@@ -45,6 +46,9 @@ def set_seed(seed: int) -> tp.Generator:
     cuda_states = None
     if tch.cuda.is_available():
         cuda_states = tch.cuda.get_rng_state_all()
+    
+    cudnn_det = tch.backends.cudnn.deterministic
+    cudnn_bench = tch.backends.cudnn.benchmark
 
     try:
         random.seed(seed)
@@ -63,8 +67,8 @@ def set_seed(seed: int) -> tp.Generator:
         if tch.cuda.is_available():
             tch.cuda.set_rng_state_all(cuda_states)
 
-        tch.backends.cudnn.deterministic = False
-        tch.backends.cudnn.benchmark = True
+        tch.backends.cudnn.deterministic = cudnn_det
+        tch.backends.cudnn.benchmark = cudnn_bench
 
 
 def get_num_workers() -> int:
@@ -111,6 +115,7 @@ def save_checkpoint(chkp_dir: Path, components: TrainComponents, epoch: int) -> 
     The checkpoint includes:
         - epoch
         - model weights
+        - best test loss
         - discriminator weights
         - generator optimizer state
         - discriminator optimizer state
@@ -127,12 +132,13 @@ def save_checkpoint(chkp_dir: Path, components: TrainComponents, epoch: int) -> 
 
     checkpoint = {
         "epoch": epoch,
-        "model_state": components["model"].state_dict(),
-        "discriminator_state": components["discriminator"].state_dict(),
-        "g_optimizer_state": components["g_optimizer"].state_dict(),
-        "d_optimizer_state": components["d_optimizer"].state_dict(),
-        "g_scheduler_state": components["g_scheduler"].state_dict(),
-        "d_scheduler_state": components["d_scheduler"].state_dict()
+        "best_loss": components.best_loss,
+        "model_state": components.generator.state_dict(),
+        "discriminator_state": components.discriminator.state_dict(),
+        "g_optimizer_state": components.g_optimizer.state_dict(),
+        "d_optimizer_state": components.d_optimizer.state_dict(),
+        "g_scheduler_state": components.g_scheduler.state_dict(),
+        "d_scheduler_state": components.d_scheduler.state_dict()
     }
 
     curr_date = datetime.strftime(datetime.now(), "%d-%m-%Y_%H:%M:%S")
@@ -169,7 +175,7 @@ def make_compos(batch: dict, alpha: tch.Tensor) -> tch.Tensor:
     Returns:
         tch.Tensor: The composite
     """
-    return alpha * batch["orig"] + (1.0 - alpha) * batch["bg"]
+    return alpha * (batch["orig"] * batch["mask"]) + (1.0 - alpha) * batch["bg"]
 
 
 def add_trimap(compos: tch.Tensor, trimap: tch.Tensor) -> tch.Tensor:
@@ -184,6 +190,33 @@ def add_trimap(compos: tch.Tensor, trimap: tch.Tensor) -> tch.Tensor:
     """
 
     return tch.cat([compos, trimap], dim=1)
+
+
+@tch.no_grad()
+def denorm_imagenet_rgb(x: tch.Tensor) -> tch.Tensor:
+    """Undo ImageNet normalization for an RGB tensor.
+
+    This function applies the inverse of ImageNet-style normalization:
+
+        y = x * std + mean
+
+    where 'mean' and 'std' are taken from 'cfg.general.mean' and
+    'cfg.general.std'.
+
+    Args:
+        x (tch.Tensor): ImageNet-normalized RGB tensor in CHW format
+            (3, H, W). The tensor is expected to be on any device; mean/std
+            will be moved to 'x.device'.
+
+    Returns:
+        tch.Tensor: De-normalized RGB tensor in CHW format (3, H, W), float32.
+            Values are typically in the [0, 1] range if the original image was
+            scaled to [0, 1] before normalization.
+    """
+    mean = tch.tensor(cfg.general.mean).view(-1,1,1).to(x.device)
+    std = tch.tensor(cfg.general.std).view(-1,1,1).to(x.device)
+
+    return x * std + mean
 
 
 def log_loss(
@@ -265,14 +298,25 @@ def log_matting_inputs_outputs(
         x = x.detach().float().cpu()
 
         return x
+
+    def _to_3ch(x: tch.Tensor) -> tch.Tensor:
+        x = _to_chw(x)
+
+        if x.size(0) == 4:
+            x = x[:3]
+
+        if x.size(0) == 1:
+            x = x.repeat(3, 1, 1)
+
+        return x
     
     images = [
-        _to_chw(compos_in),
-        _to_chw(trimap_in),
-        _to_chw(alpha_orig),
-        _to_chw(compos_out),
-        _to_chw(trimap_out),
-        _to_chw(alpha_pred),
+        denorm_imagenet_rgb(_to_3ch(compos_in)),
+        _to_3ch(trimap_in),
+        _to_3ch(alpha_orig),
+        denorm_imagenet_rgb(_to_3ch(compos_out)),
+        _to_3ch(trimap_out),
+        _to_3ch(alpha_pred),
     ] 
 
     grid = make_grid(tch.stack(images, dim=0), nrow=nrow)
