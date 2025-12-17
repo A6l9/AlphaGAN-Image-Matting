@@ -7,10 +7,33 @@ from .aspp import ASPP
 
 
 class Encoder(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, in_ch: int=4) -> None:
         super().__init__()
 
         resnet = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
+
+        if in_ch != 3:
+            old = resnet.conv1
+            new = nn.Conv2d(
+                in_ch,
+                old.out_channels,
+                kernel_size=old.kernel_size,
+                stride=old.stride,
+                padding=old.padding,
+                bias=(old.bias is not None),
+            )
+
+            with tch.no_grad():
+                new.weight[:, :3].copy_(old.weight)
+
+                if in_ch > 3:
+                    extra = in_ch - 3
+                    new.weight[:, 3:3+extra].zero_()
+
+                if old.bias is not None:
+                    new.bias.copy_(old.bias)
+
+            resnet.conv1 = new
 
         for _, m in resnet.layer3.named_modules():
             if isinstance(m, tch.nn.Conv2d):
