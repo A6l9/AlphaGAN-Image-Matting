@@ -24,7 +24,7 @@ class GANLoss(BaseLoss):
         self.fake_label = fake_label
         self.criterion = nn.BCEWithLogitsLoss()
 
-    def __getitem__(self, pred: tch.Tensor, is_real: bool) -> tch.Tensor:
+    def __call__(self, pred: tch.Tensor, is_real: bool) -> tch.Tensor:
         """Compute adversarial loss for given predictions and target type.
 
         Args:
