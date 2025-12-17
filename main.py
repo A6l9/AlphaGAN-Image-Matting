@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import torch as tch
-from tqdm import tqdm
 import torch.nn as nn
 from torch import optim
 from torch.optim.lr_scheduler import CyclicLR
@@ -34,8 +33,10 @@ def main(csv_path: Path) -> None:
     discriminator = mdl.PatchGANDiscriminator(4, nn.BatchNorm2d)
     discriminator.to(DEVICE)
 
+    transforms = TransformsPipeline()
+
     # Prepare train and test datasets
-    dataset_train = CustomDataset(csv_path, train=True, transforms=TransformsPipeline)
+    dataset_train = CustomDataset(csv_path, train=True, transforms=transforms)
     train_dataloader = DataLoader(
         dataset_train,
         batch_size=cfg.general.batch_size,
@@ -43,7 +44,7 @@ def main(csv_path: Path) -> None:
         num_workers=utl.get_num_workers(),
         pin_memory=True
     )
-    dataset_test = CustomDataset(csv_path, train=False, transforms=TransformsPipeline)
+    dataset_test = CustomDataset(csv_path, train=False, transforms=transforms)
     test_dataloader = DataLoader(
         dataset_test,
         batch_size=cfg.general.batch_size,
@@ -81,6 +82,9 @@ def main(csv_path: Path) -> None:
     l_alpha_loss = ls.LAlphaLoss()
     l_comp_loss = ls.LCompositeLoss()
     gan_loss = ls.GANLoss()
+
+    # Define the best test loss
+    best_loss = 1.0
         
     # Define the checkpoints dir and the logging dir paths
     checkpoints_dir = Path(cfg.general.checkpoints_dir).absolute()
@@ -100,13 +104,12 @@ def main(csv_path: Path) -> None:
         g_scheduler.load_state_dict(checkpoint["g_scheduler_state"])
         d_scheduler.load_state_dict(checkpoint["d_scheduler_state"])
 
+        best_loss = checkpoint["best_loss"]
+
         curr_epoch = checkpoint["epoch"] + 1
     else:
         print(utl.color("No checkpoint found, starting from scratch.", "green"))
         curr_epoch = 0
-
-    # Define progress bar
-    prog_bar = tqdm(iterable=enumerate(train_dataloader), unit="batch", desc="Training...", leave=True)
 
     # Create the tb logger
     with SummaryWriter(Path(cfg.train.logging.log_dir)) as writer:
@@ -115,7 +118,7 @@ def main(csv_path: Path) -> None:
             device=DEVICE,
             generator=generator,
             epoch=curr_epoch,
-            prog_bar=prog_bar,
+            best_loss=best_loss,
             discriminator=discriminator,
             train_loader=train_dataloader,
             test_loader=test_dataloader,
