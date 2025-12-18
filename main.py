@@ -109,7 +109,7 @@ def main(csv_path: Path) -> None:
         curr_epoch = checkpoint["epoch"] + 1
     else:
         print(utl.color("No checkpoint found, starting from scratch.", "green"))
-        curr_epoch = 0
+        curr_epoch = 1
 
     # Create the tb logger
     with SummaryWriter(Path(cfg.train.logging.log_dir)) as writer:

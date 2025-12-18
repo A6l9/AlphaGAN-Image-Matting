@@ -58,8 +58,8 @@ def test_one_epoch(epoch: int, train_comp: sch.TrainComponents) -> tuple[float, 
         alpha_loss_total += float(loss_alpha.item())
         compos_loss_total += float(loss_comp.item())
 
-        # Logging input/output images every 10 batches
-        if n_batches % 50 == 0:
+        # Logging input/output images every 'log_io_n_batches' batches
+        if n_batches % cfg.train.logging.log_io_n_batches == 0:
             utl.log_matting_inputs_outputs(
                 compos[:, :3],
                 trim,
@@ -202,7 +202,7 @@ def train_pipeline(train_comp: sch.TrainComponents) -> None:
     """
     loss_vals = sch.LossValues()
 
-    for epoch in range(train_comp.epoch + 1, cfg.train.epoches + 1):
+    for epoch in range(train_comp.epoch, cfg.train.epoches + 1):
         # Define progress bar
         prog_bar = tqdm(iterable=enumerate(train_comp.train_loader), total=len(train_comp.train_loader), unit="batch", desc="Training...", leave=True)
 
