@@ -32,9 +32,9 @@ class TrainComponents:
 
 @dataclass 
 class LossValues:
-    alpha_loss: float = 0.0
-    compos_loss: float = 0.0
-    fake_d_loss: float = 0.0
-    real_d_loss: float = 0.0
+    l1_alpha_loss: float = 0.0
+    l1_compos_loss: float = 0.0
+    bce_fake_d_loss: float = 0.0
+    bce_real_d_loss: float = 0.0
     d_loss: float = 0.0
     g_loss: float = 0.0
