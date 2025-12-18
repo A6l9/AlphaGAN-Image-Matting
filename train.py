@@ -106,7 +106,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.LossValues, train_comp: sch.Train
 
         alpha_pred = train_comp.generator(compos)
 
-        pred_compos = utl.make_compos(batch, alpha_pred)
+        pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
 
         # Update D
         train_comp.d_optimizer.zero_grad(set_to_none=True)
