@@ -158,24 +158,24 @@ def prepare_labels(fg_path: Path,
             writer.writerows(train_set)
 
 
-def unpack_archives(arch_path: Path) -> None:
-    """Unpacks the archive by the 'arch_path' in the parent directory
+def unpack_archives(arch_path: Path, dst_path: Path) -> None:
+    """Unpacks the archive by the 'arch_path' in the 'dst_path'
 
     Args:
         arch_path (Path): The archive path
+        dst_path (Path): The destination path
     """
-    parent_dir = arch_path.parent
-
     with zipfile.ZipFile(arch_path) as zf:
-        zf.extractall(parent_dir)
+        zf.extractall(dst_path)
 
 
 if __name__ == "__main__":
     fg_zip_path = Path(__file__).parent / "dataset" / "AIM-500-20251030T115928Z-1-001.zip"
     bg_zip_path = Path(__file__).parent / "dataset" / "archive.zip"
+    dst_path = Path(__file__).parent / "dataset"
 
-    unpack_archives(fg_zip_path)
-    unpack_archives(bg_zip_path)
+    unpack_archives(fg_zip_path, dst_path)
+    unpack_archives(bg_zip_path, dst_path)
 
     fg_path = Path(__file__).parent / "dataset" / "AIM-500"
     bg_path = Path(__file__).parent / "dataset" / "BG20K"
