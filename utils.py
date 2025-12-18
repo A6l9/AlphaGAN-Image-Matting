@@ -206,21 +206,19 @@ def color(text: str, name: str) -> str:
     return f"{COLORS.get(name, COLORS['reset'])}{text}{COLORS['reset']}"
 
 
-def make_compos(batch: dict, alpha: tch.Tensor) -> tch.Tensor:
+def make_compos(fg: tch.Tensor, mask: tch.Tensor, bg: tch.Tensor, alpha: tch.Tensor) -> tch.Tensor:
     """Overlays the foreground object on 
     the background using alpha
 
     Args:
-        batch (dict): The batch as a dictionary 
-        that should contain the following fields:
-        bg - The background image
-        orig - The foreground image
-        trimap - The trimap of the foreground image
+        bg: (tch.Tensor) The background image
+        orig: (tch.Tensor) The foreground image
+        trimap: (tch.Tensor) The trimap of the foreground image
 
     Returns:
         tch.Tensor: The composite
     """
-    return alpha * (batch["orig"] * batch["mask"]) + (1.0 - alpha) * batch["bg"]
+    return alpha * (fg * mask) + (1.0 - alpha) * bg
 
 
 def add_trimap(compos: tch.Tensor, trimap: tch.Tensor) -> tch.Tensor:

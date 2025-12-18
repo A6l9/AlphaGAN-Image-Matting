@@ -44,7 +44,7 @@ def test_one_epoch(epoch: int, train_comp: sch.TrainComponents) -> tuple[float, 
 
         alpha_pred = train_comp.generator(compos)
 
-        pred_compos = utl.make_compos(batch, alpha_pred)
+        pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
         
         loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
         loss_comp = train_comp.l_comp_loss(
