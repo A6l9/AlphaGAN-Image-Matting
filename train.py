@@ -195,10 +195,22 @@ def train_one_epoch(epoch: int, loss_vals: sch.LossValues, train_comp: sch.Train
 
 
 def train_pipeline(train_comp: sch.TrainComponents) -> None:
-    """_summary_
+    """Run the full training loop: train, evaluate, and optionally save checkpoints.
+
+    The pipeline performs epoch-based training and evaluation. It tracks the best
+    validation loss and saves checkpoints according to the configured policy.
+
+    Checkpoint policy:
+    - If use_colab is False: save full checkpoints periodically and on improvement.
+    - If use_colab is True: keep only two files (last and best) to save disk space.
 
     Args:
-        train_comp (TrainComponents): _description_
+        train_comp: Training components including model(s), optimizers, schedulers,
+            dataloaders, and training state (current epoch, best_loss).
+
+    Side effects:
+        - Updates train_comp.best_loss when validation loss improves.
+        - Writes checkpoint files to cfg.general.checkpoints_dir.
     """
     loss_vals = sch.LossValues()
 
@@ -214,13 +226,36 @@ def train_pipeline(train_comp: sch.TrainComponents) -> None:
 
         general_loss = alpha_loss + compos_loss
         
-        # Save checkpoint every 'save_chkp_n_epoches' batches
-        if epoch % cfg.train.save_chkp_n_epoches == 0 or general_loss < train_comp.best_loss:
-            chkp_dir = Path(cfg.general.checkpoints_dir).resolve()
+        if not cfg.general.use_colab:
+            # Save checkpoint every 'save_chkp_n_epoches' batches or if the loss was better
+            if epoch % cfg.train.save_chkp_n_epoches == 0 or general_loss < train_comp.best_loss:
+                chkp_dir = Path(cfg.general.checkpoints_dir).resolve()
 
-            train_comp.best_loss = general_loss
+                train_comp.best_loss = general_loss
 
-            utl.save_checkpoint(chkp_dir, train_comp, epoch)
+                utl.save_checkpoint(chkp_dir, train_comp, epoch)
 
-            # Zeroing the loss values
-            zeroing_loss_values(loss_vals)
+                # Zeroing the loss values
+                zeroing_loss_values(loss_vals)
+        elif cfg.general.use_colab: # If we using the colab the program execute another function for save checkpoint
+            # Save checkpoint every 'save_chkp_n_epoches' batches  or if the loss was better
+            if epoch % cfg.train.save_chkp_n_epoches == 0 or general_loss < train_comp.best_loss:
+                chkp_dir = Path(cfg.general.checkpoints_dir).resolve()
+
+                best = general_loss < train_comp.best_loss
+
+                train_comp.best_loss = general_loss
+
+                # If the loss was better we save checkpoint as 'best'
+                if best:
+                    chkp_name = cfg.general.colab.best_chkp_name
+
+                    utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, chkp_name)
+                
+                chkp_name = cfg.general.colab.last_chkp_name
+                
+                # Also save the last checkpoint
+                utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, chkp_name)
+
+                # Zeroing the loss values
+                zeroing_loss_values(loss_vals)

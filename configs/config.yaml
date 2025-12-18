@@ -4,6 +4,10 @@ general:
   std: [0.229, 0.224, 0.225]
   batch_size: 5
   checkpoints_dir: checkpoints/
+  colab:
+    use_colab: 1
+    best_chkp_name: best_chkp
+    last_chkp_name: last_chkp
 
 train:
   save_chkp_n_epoches: 50

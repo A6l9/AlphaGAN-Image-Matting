@@ -148,6 +148,51 @@ def save_checkpoint(chkp_dir: Path, components: TrainComponents, epoch: int) -> 
     tch.save(checkpoint, checkpoint_path)
 
 
+def save_checkpoint_use_colab(chkp_dir: Path, 
+                              components: TrainComponents, 
+                              epoch: int,
+                              checkpoint_name: str
+                              ) -> None:
+    """Saves a training checkpoint if the train executing in the GoogleColab
+    This function rewrite the last and the best checkpoints for memory saving
+
+    The checkpoint includes:
+        - epoch
+        - model weights
+        - best test loss
+        - discriminator weights
+        - generator optimizer state
+        - discriminator optimizer state
+        - generator scheduler state
+        - discriminator scheduler state
+
+    Args:
+        chkp_dir (Path): The path to the checkpoints directory
+        components (TrainComponents): The train components
+        epoch (int): The current epoch
+        checkpoint_name (str): The name of checkpont; Usually best/last
+    """
+    if not chkp_dir.exists():
+        chkp_dir.mkdir(parents=True, exist_ok=True)
+
+    checkpoint = {
+        "epoch": epoch,
+        "best_loss": components.best_loss,
+        "model_state": components.generator.state_dict(),
+        "discriminator_state": components.discriminator.state_dict(),
+        "g_optimizer_state": components.g_optimizer.state_dict(),
+        "d_optimizer_state": components.d_optimizer.state_dict(),
+        "g_scheduler_state": components.g_scheduler.state_dict(),
+        "d_scheduler_state": components.d_scheduler.state_dict()
+    }
+
+    checkpoint_name = f"{checkpoint_name}.pth"
+
+    checkpoint_path = chkp_dir / checkpoint_name
+
+    tch.save(checkpoint, checkpoint_path)
+
+
 def color(text: str, name: str) -> str:
     """Colorizes the terminal output
 
