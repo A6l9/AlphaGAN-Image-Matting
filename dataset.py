@@ -1,5 +1,6 @@
 import csv
 import random
+import zipfile
 from PIL import Image
 from pathlib import Path
 
@@ -157,7 +158,25 @@ def prepare_labels(fg_path: Path,
             writer.writerows(train_set)
 
 
+def unpack_archives(arch_path: Path) -> None:
+    """Unpacks the archive by the 'arch_path' in the parent directory
+
+    Args:
+        arch_path (Path): The archive path
+    """
+    parent_dir = arch_path.parent
+
+    with zipfile.ZipFile(arch_path) as zf:
+        zf.extractall(parent_dir)
+
+
 if __name__ == "__main__":
+    fg_zip_path = Path(__file__).parent / "dataset" / "AIM-500-20251030T115928Z-1-001.zip"
+    bg_zip_path = Path(__file__).parent / "dataset" / "archive.zip"
+
+    unpack_archives(fg_zip_path)
+    unpack_archives(bg_zip_path)
+
     fg_path = Path(__file__).parent / "dataset" / "AIM-500"
     bg_path = Path(__file__).parent / "dataset" / "BG20K"
     output_path = Path(__file__).parent / "dataset_labels.csv"
