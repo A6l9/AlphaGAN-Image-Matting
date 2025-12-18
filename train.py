@@ -15,11 +15,11 @@ def zeroing_loss_values(loss_vals: sch.LossValues) -> None:
     :param loss_vals: Description
     :type loss_vals: sch.LossValues
     """
-    loss_vals.alpha_loss = 0.0
-    loss_vals.compos_loss = 0.0
+    loss_vals.l1_alpha_loss = 0.0
+    loss_vals.l1_compos_loss = 0.0
     loss_vals.g_loss = 0.0
-    loss_vals.fake_d_loss = 0.0
-    loss_vals.real_d_loss = 0.0
+    loss_vals.bce_fake_d_loss = 0.0
+    loss_vals.bce_real_d_loss = 0.0
     loss_vals.d_loss = 0.0
 
 
@@ -148,11 +148,11 @@ def train_one_epoch(epoch: int, loss_vals: sch.LossValues, train_comp: sch.Train
         train_comp.g_scheduler.step()
 
         # Saving loss values
-        loss_vals.alpha_loss += float(loss_alpha.item())
-        loss_vals.compos_loss += float(loss_comp.item())
+        loss_vals.l1_alpha_loss += float(loss_alpha.item())
+        loss_vals.l1_compos_loss += float(loss_comp.item())
         loss_vals.g_loss += float(loss_g_gan.item())
-        loss_vals.fake_d_loss += float(loss_d_fake.item())
-        loss_vals.real_d_loss += float(loss_d_real.item())
+        loss_vals.bce_fake_d_loss += float(loss_d_fake.item())
+        loss_vals.bce_real_d_loss += float(loss_d_real.item())
         loss_vals.d_loss += float(loss_d.item())
 
         # Logging learning rates every 'log_lr_n_batches' batches
@@ -225,37 +225,31 @@ def train_pipeline(train_comp: sch.TrainComponents) -> None:
         alpha_loss, compos_loss = test_one_epoch(epoch, train_comp)
 
         general_loss = alpha_loss + compos_loss
+
+        # Save checkpoint every 'save_chkp_n_epoches' batches  or if the loss was better
+        if epoch % cfg.train.save_chkp_n_epoches == 0 or general_loss < train_comp.best_loss:
+            print(utl.color("Saving the checkpoint...", "green"))
+
+            chkp_dir = Path(cfg.general.checkpoints_dir).resolve()
         
-        if not cfg.general.use_colab:
-            # Save checkpoint every 'save_chkp_n_epoches' batches or if the loss was better
-            if epoch % cfg.train.save_chkp_n_epoches == 0 or general_loss < train_comp.best_loss:
-                chkp_dir = Path(cfg.general.checkpoints_dir).resolve()
+            if not cfg.general.colab.use_colab:
 
                 train_comp.best_loss = general_loss
 
                 utl.save_checkpoint(chkp_dir, train_comp, epoch)
-
-                # Zeroing the loss values
-                zeroing_loss_values(loss_vals)
-        elif cfg.general.use_colab: # If we using the colab the program execute another function for save checkpoint
-            # Save checkpoint every 'save_chkp_n_epoches' batches  or if the loss was better
-            if epoch % cfg.train.save_chkp_n_epoches == 0 or general_loss < train_comp.best_loss:
-                chkp_dir = Path(cfg.general.checkpoints_dir).resolve()
+            elif cfg.general.colab.use_colab: # If we using the colab the program execute another function for save checkpoint
+                print(utl.color("Using a way to save checkpoints with limited memory...", "green"))
 
                 best = general_loss < train_comp.best_loss
 
                 train_comp.best_loss = general_loss
 
-                # If the loss was better we save checkpoint as 'best'
+                # If the loss was better save checkpoint as 'best'
                 if best:
                     chkp_name = cfg.general.colab.best_chkp_name
-
-                    utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, chkp_name)
-                
-                chkp_name = cfg.general.colab.last_chkp_name
-                
-                # Also save the last checkpoint
+                else:
+                    chkp_name = cfg.general.colab.last_chkp_name
                 utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, chkp_name)
 
-                # Zeroing the loss values
-                zeroing_loss_values(loss_vals)
+            # Zeroing the loss values
+            zeroing_loss_values(loss_vals)
