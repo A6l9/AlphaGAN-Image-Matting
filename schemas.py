@@ -30,11 +30,31 @@ class TrainComponents:
     writer: SummaryWriter
 
 
+@dataclass
+class BaseLossValues:
+    def zeroing_loss_values(self) -> None:
+        """
+        Reset all loss values stored in the dataclass to zero.
+
+        This method iterates over all instance attributes and sets
+        their values to 0.0. It assumes that all fields represent
+        numeric loss values.
+        """
+        for key in self.__dict__:
+            self.__dict__[key] = 0.0
+
+
 @dataclass 
-class LossValues:
+class TrainLossValues(BaseLossValues):
     l1_alpha_loss: float = 0.0
     l1_compos_loss: float = 0.0
     bce_fake_d_loss: float = 0.0
     bce_real_d_loss: float = 0.0
     d_loss: float = 0.0
     g_loss: float = 0.0
+
+
+@dataclass 
+class TestLossValues(BaseLossValues):
+    l1_alpha_loss: float = 0.0
+    l1_compos_loss: float = 0.0

@@ -5,12 +5,12 @@ general:
   batch_size: 5
   checkpoints_dir: checkpoints/
   colab:
-    use_colab: 1
+    use_colab: 0
     best_chkp_name: best_chkp
     last_chkp_name: last_chkp
 
 train:
-  save_chkp_n_epoches: 50
+  save_chkp_n_epoches: 1
   crop_size: 256
   scheduler:
     start_lr: 1e-5
@@ -23,6 +23,8 @@ train:
     log_io_n_batches: 10
     log_lr_n_batches: 50 
   epoches: 5000
+  losses:
+    lambda_gan_g: 10
 
 test:
   resize_size: 256
