@@ -8,33 +8,36 @@ from cfg_loader import cfg
 import schemas as sch
 
 
-def zeroing_loss_values(loss_vals: sch.LossValues) -> None:
-    """
-    Docstring for zeroing_loss_values
-    
-    :param loss_vals: Description
-    :type loss_vals: sch.LossValues
-    """
-    loss_vals.l1_alpha_loss = 0.0
-    loss_vals.l1_compos_loss = 0.0
-    loss_vals.g_loss = 0.0
-    loss_vals.bce_fake_d_loss = 0.0
-    loss_vals.bce_real_d_loss = 0.0
-    loss_vals.d_loss = 0.0
-
-
 @tch.no_grad()
-def test_one_epoch(epoch: int, train_comp: sch.TrainComponents) -> tuple[float, float]:
+def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.TrainComponents) -> sch.TestLossValues:
+    """Run one evaluation epoch.
+
+    This function evaluates the generator on the test dataloader without gradient
+    computation. It computes:
+    - L1 alpha loss between predicted alpha and ground-truth alpha
+    - L1 composite loss between predicted composite (built from predicted alpha) and
+      the ground-truth composite RGB
+
+    It also logs input and output images to TensorBoard.
+
+    Args:
+        epoch: Current epoch index (used for logging and global step).
+        loss_vals: Accumulator for validation losses. The function adds batch losses
+            to this object (as floats).
+        train_comp: Training components container holding the generator, dataloaders,
+            losses, device, and TensorBoard writer.
+
+    Returns:
+        sch.TestLossValues: Updated loss_vals containing accumulated losses for this validation epoch.
+    """
     print(utl.color("Testing...", "green"))
 
     train_comp.generator.eval()
 
-    n_batches = 0
-    alpha_loss_total = 0.0
-    compos_loss_total = 0.0
+    n_batches = len(train_comp.test_loader)
 
     for i, batch in enumerate(train_comp.test_loader):
-        step = (epoch * len(train_comp.train_loader)) + i
+        step = (epoch * len(train_comp.test_loader)) + i
 
         compos = batch["compos"].to(train_comp.device, non_blocking=True)
         trim = batch["trim"].to(train_comp.device, non_blocking=True)
@@ -55,11 +58,11 @@ def test_one_epoch(epoch: int, train_comp: sch.TrainComponents) -> tuple[float, 
             )
 
         # Saving loss values
-        alpha_loss_total += float(loss_alpha.item())
-        compos_loss_total += float(loss_comp.item())
+        loss_vals.l1_alpha_loss += float(loss_alpha.item())
+        loss_vals.l1_compos_loss += float(loss_comp.item())
 
         # Logging input/output images every 'log_io_n_batches' batches
-        if n_batches % cfg.train.logging.log_io_n_batches == 0:
+        if (i + 1) % cfg.train.logging.log_io_n_batches == 0:
             utl.log_matting_inputs_outputs(
                 compos[:, :3],
                 trim,
@@ -71,26 +74,38 @@ def test_one_epoch(epoch: int, train_comp: sch.TrainComponents) -> tuple[float, 
                 step,
                 train_comp.writer
             )
-        
-        n_batches += 1
 
     # Logging loss values
-    utl.log_loss(epoch, alpha_loss_total / n_batches, f"test/alpha_loss", train_comp.writer)
-    utl.log_loss(epoch, compos_loss_total / n_batches, f"test/compos_loss", train_comp.writer)
+    for key, value in loss_vals.__dict__.items():
+        utl.log_loss(epoch, value / n_batches, f"test/{key}", train_comp.writer)
     
-    return alpha_loss_total / n_batches, compos_loss_total / n_batches
+    return loss_vals
 
 
-def train_one_epoch(epoch: int, loss_vals: sch.LossValues, train_comp: sch.TrainComponents, prog_bar: tqdm) -> sch.LossValues:
-    """_summary_
+def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.TrainComponents, prog_bar: tqdm) -> sch.TrainLossValues:
+    """Run one training epoch for generator and discriminator.
+
+    This function performs adversarial training in the following order per batch:
+    1) Update discriminator (D) using:
+       - real composite+trimap as positive samples
+       - generated composite+trimap (detached) as negative samples
+    2) Update generator (G) using a weighted sum of:
+       - alpha L1 loss (alpha_pred vs alpha_gt)
+       - composite L1 loss (composite(alpha_pred) vs composite_gt RGB)
+       - GAN loss (make D classify generated composites as real)
+
+    It also logs scalars (losses, learning rates) and images to TensorBoard
+    according to the configured batch intervals.
 
     Args:
-        epoch (int): _description_
-        loss_vals (sch.LossValues): _description_
-        train_comp (sch.TrainComponents): _description_
+        epoch: Current epoch index (used for global step).
+        loss_vals: Accumulator for training losses. Batch losses are added as floats.
+        train_comp: Training components container with models, optimizers, schedulers,
+            losses, device, and writer.
+        prog_bar: Progress bar iterator over the training dataloader.
 
     Returns:
-        sch.LossValues: _description_
+        sch.TrainLossValues: Updated loss_vals containing accumulated losses for the epoch.
     """
     train_comp.generator.train()
     train_comp.discriminator.train()
@@ -120,7 +135,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.LossValues, train_comp: sch.Train
         loss_d_real = train_comp.gan_loss(pred=d_real, is_real=True)
         loss_d_fake = train_comp.gan_loss(pred=d_fake, is_real=False)
 
-        loss_d = loss_d_real + loss_d_fake
+        loss_d = 0.5 * (loss_d_real + loss_d_fake)
 
         loss_d.backward()
         train_comp.d_optimizer.step()
@@ -141,7 +156,8 @@ def train_one_epoch(epoch: int, loss_vals: sch.LossValues, train_comp: sch.Train
             target=compos[:, :3]
             )
         
-        loss_g = loss_alpha + loss_comp + loss_g_gan
+        # Calculate the generator loss; multiply the discriminator's loss by lambda to equalize with the rest 
+        loss_g = loss_alpha + loss_comp + (loss_g_gan * cfg.train.losses.lambda_gan_g) 
 
         loss_g.backward()
         train_comp.g_optimizer.step()
@@ -188,9 +204,6 @@ def train_one_epoch(epoch: int, loss_vals: sch.LossValues, train_comp: sch.Train
     for key, value in loss_vals.__dict__.items():
         utl.log_loss(epoch, value / len(train_comp.train_loader), f"train/{key}", train_comp.writer)
     
-    # Zeroing the loss values
-    zeroing_loss_values(loss_vals)
-    
     return loss_vals
 
 
@@ -212,44 +225,50 @@ def train_pipeline(train_comp: sch.TrainComponents) -> None:
         - Updates train_comp.best_loss when validation loss improves.
         - Writes checkpoint files to cfg.general.checkpoints_dir.
     """
-    loss_vals = sch.LossValues()
+    train_loss_vals = sch.TrainLossValues()
+    test_loss_vals = sch.TestLossValues()
 
     for epoch in range(train_comp.epoch, cfg.train.epoches + 1):
-        # Define progress bar
-        prog_bar = tqdm(iterable=enumerate(train_comp.train_loader), total=len(train_comp.train_loader), unit="batch", desc="Training...", leave=True)
+        # Define progress bar through the context manager
+        with tqdm(iterable=enumerate(train_comp.train_loader), 
+                  total=len(train_comp.train_loader), unit="batch", desc="Training...", leave=True) as prog_bar:
 
-        prog_bar.set_description(f"Training... epoch: {epoch}")
+            prog_bar.set_description(f"Training... epoch: {epoch}")
 
-        train_one_epoch(epoch, loss_vals, train_comp, prog_bar)
+            # Run the current epoch training
+            train_loss_vals = train_one_epoch(epoch, train_loss_vals, train_comp, prog_bar)
 
-        alpha_loss, compos_loss = test_one_epoch(epoch, train_comp)
+        # Zeroing the train loss values
+        train_loss_vals.zeroing_loss_values()
 
-        general_loss = alpha_loss + compos_loss
+        # Run the current epoch testing
+        test_loss_vals = test_one_epoch(epoch, test_loss_vals, train_comp)
+
+        # Calculate 
+        general_loss = test_loss_vals.l1_alpha_loss + test_loss_vals.l1_compos_loss
+
+        # Zeroing the test loss values
+        test_loss_vals.zeroing_loss_values()
 
         # Save checkpoint every 'save_chkp_n_epoches' batches  or if the loss was better
         if epoch % cfg.train.save_chkp_n_epoches == 0 or general_loss < train_comp.best_loss:
             print(utl.color("Saving the checkpoint...", "green"))
 
             chkp_dir = Path(cfg.general.checkpoints_dir).resolve()
-        
-            if not cfg.general.colab.use_colab:
 
+            best = general_loss < train_comp.best_loss
+
+            # If the loss was better save checkpoint as 'best'
+            if best:
+                # Update the best loss
                 train_comp.best_loss = general_loss
 
+            if not cfg.general.colab.use_colab:
                 utl.save_checkpoint(chkp_dir, train_comp, epoch)
-            elif cfg.general.colab.use_colab: # If we using the colab the program execute another function for save checkpoint
+            elif cfg.general.colab.use_colab: # If using the colab the program execute another function for save checkpoint
                 print(utl.color("Using a way to save checkpoints with limited memory...", "green"))
 
-                best = general_loss < train_comp.best_loss
-
-                train_comp.best_loss = general_loss
-
-                # If the loss was better save checkpoint as 'best'
                 if best:
-                    chkp_name = cfg.general.colab.best_chkp_name
-                else:
-                    chkp_name = cfg.general.colab.last_chkp_name
-                utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, chkp_name)
+                    utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, cfg.general.colab.best_chkp_name)
 
-            # Zeroing the loss values
-            zeroing_loss_values(loss_vals)
+                utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, cfg.general.colab.last_chkp_name)
