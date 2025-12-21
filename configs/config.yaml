@@ -24,7 +24,7 @@ train:
     log_lr_n_batches: 50 
   epoches: 5000
   losses:
-    lambda_gan_g: 10
+    lambda_gan_g: 0.15
 
 test:
   resize_size: 256
