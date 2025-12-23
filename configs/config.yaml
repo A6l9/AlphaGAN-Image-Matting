@@ -10,12 +10,18 @@ general:
     last_chkp_name: last_chkp
 
 train:
+  use_d_loss: 1
   save_chkp_n_epoches: 1
   crop_size: 256
   scheduler:
-    start_lr: 1e-5
-    end_lr: 1e-3
-    step_size_up: 2000
+    D:
+      start_lr: 1e-5
+      end_lr: 1.5e-4
+      step_size_up: 4000
+    G:
+      start_lr: 1e-3
+      end_lr: 3e-4
+      step_size_up: 4000
   optimizer:
     weight_decay: 5e-4
   logging:
