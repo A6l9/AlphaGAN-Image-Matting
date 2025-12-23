@@ -111,12 +111,8 @@ def main(csv_path: Path) -> None:
     l_alpha_loss = ls.LAlphaLoss()
     l_comp_loss = ls.LCompositeLoss()
 
-    # Initialize the discriminator if 'train.use_d_loss' == 1
-    d_components = None
-
-    if cfg.train.use_d_loss:
-        print(utl.color("Selected a training without a discriminator", "yellow"))
-        d_components = get_discriminator(DEVICE)
+    # Initialize the discriminator
+    d_components = get_discriminator(DEVICE)
 
     # Define the best test loss. Default 'inf'
     best_loss = float("inf")
@@ -136,10 +132,11 @@ def main(csv_path: Path) -> None:
 
         g_scheduler.load_state_dict(checkpoint["g_scheduler_state"])
 
-        if d_components: 
-            d_components.discriminator.load_state_dict(checkpoint["discriminator_state"])
-            d_components.d_optimizer.load_state_dict(checkpoint["d_optimizer_state"])
-            d_components.d_scheduler.load_state_dict(checkpoint["d_scheduler_state"])
+        d_components.discriminator.load_state_dict(checkpoint["discriminator_state"])
+
+        d_components.d_optimizer.load_state_dict(checkpoint["d_optimizer_state"])
+
+        d_components.d_scheduler.load_state_dict(checkpoint["d_scheduler_state"])
 
         best_loss = checkpoint["best_loss"]
 
@@ -163,16 +160,18 @@ def main(csv_path: Path) -> None:
             l_alpha_loss=l_alpha_loss,
             l_comp_loss=l_comp_loss,
             writer=writer,
-            d_components=None
+            d_components=d_components
         )
+                                           
+        if not cfg.train.use_d_loss:
+            print(utl.color("Selected a training without a discriminator", "yellow"))
 
-        if d_components:
-            components.d_components = d_components 
+            components.use_gan_loss = bool(cfg.train.use_d_loss)
 
         # Start the train pipeline
         train_pipeline(components)
 
 
 if __name__ == "__main__":
-    csv_path = Path(__file__).parent / "dataset" / "dataset_labels.csv"
+    csv_path = Path(__file__).parent / "dataset" / "dataset_labels_short.csv"
     main(csv_path)

@@ -56,6 +56,11 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
             bg=bg,
             target=compos[:, :3]
             )
+        
+        # Logging current metrics every 'log_curr_mets_n_batches'
+        if (i + 1) % cfg.test.logging.log_curr_mets_n_batches == 0:
+            utl.log_loss(step, float(loss_alpha.item()), f"curr_mets_test/alpha_loss", train_comp.writer)
+            utl.log_loss(step, float(loss_comp.item()), f"curr_mets_test/compos_loss", train_comp.writer)
 
         # Saving loss values
         loss_vals.l1_alpha_loss += float(loss_alpha.item())
@@ -77,7 +82,7 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
 
     # Logging loss values
     for key, value in loss_vals.__dict__.items():
-        utl.log_loss(epoch, value / n_batches, f"test/{key}", train_comp.writer)
+        utl.log_loss(epoch, value / n_batches, f"loss_test/{key}", train_comp.writer)
     
     return loss_vals
 
@@ -129,7 +134,7 @@ def update_generator(
     
     loss_g_gan = 0.0
     
-    if train_comp.d_components:
+    if train_comp.use_gan_loss:
         d_in_fake_for_g = utl.add_trimap(pred_compos, trim)
         d_fake_for_g = train_comp.d_components.discriminator(d_in_fake_for_g)
 
@@ -147,11 +152,10 @@ def update_generator(
 
     g_losses = sch.GLosses(
                 alpha_loss=float(loss_alpha.item()),
-                compos_loss=float(loss_comp.item()),
-                gan_loss=None
+                compos_loss=float(loss_comp.item())
             )
     
-    if train_comp.d_components:
+    if train_comp.use_gan_loss:
         g_losses.gan_loss = float(loss_g_gan.item())
     
     return g_losses
@@ -226,7 +230,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
     """
     train_comp.generator.train()
 
-    if train_comp.d_components:
+    if train_comp.use_gan_loss:
         train_comp.d_components.discriminator.train()
 
     for i, batch in prog_bar:
@@ -243,7 +247,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
 
         # Update D if train_comp.d_components != None
-        if train_comp.d_components:
+        if train_comp.use_gan_loss:
             d_losses = update_discriminator(compos, pred_compos, trim, train_comp)
 
         # Update G
@@ -254,11 +258,23 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         loss_vals.l1_compos_loss += g_losses.compos_loss
 
         # Saving GAN and D losses if train_comp.d_components != None
-        if train_comp.d_components:
+        if train_comp.use_gan_loss:
             loss_vals.g_loss += g_losses.gan_loss
             loss_vals.bce_fake_d_loss += d_losses.loss_d_fake
             loss_vals.bce_real_d_loss += d_losses.loss_d_real
             loss_vals.d_loss += d_losses.loss_d
+
+        # Logging current G losses every 'log_curr_losses_n_batches'
+        if (i + 1) % cfg.train.logging.log_curr_loss_n_batches == 0:
+            for key, value in g_losses.__dict__.items():
+                utl.log_loss(step, value, f"curr_loss_train/G/{key}", train_comp.writer)
+        
+        # Check is D enabled or not
+        if train_comp.use_gan_loss:
+            # Logging current D losses every 'log_curr_losses_n_batches'
+            if (i + 1) % cfg.train.logging.log_curr_loss_n_batches == 0:
+                for key, value in d_losses.__dict__.items():
+                    utl.log_loss(step, value, f"curr_loss_train/D/{key}", train_comp.writer)
 
         # Logging learning rates every 'log_lr_n_batches' batches
         if (i + 1) % cfg.train.logging.log_lr_n_batches == 0:
@@ -269,7 +285,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
                 train_comp.writer
             )
 
-            if train_comp.d_components:
+            if train_comp.use_gan_loss:
                 utl.log_lr(
                 step, 
                 train_comp.d_components.d_optimizer.param_groups[0]["lr"],
@@ -293,7 +309,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
     
     # Logging loss values
     for key, value in loss_vals.__dict__.items():
-        utl.log_loss(epoch, value / len(train_comp.train_loader), f"train/{key}", train_comp.writer)
+        utl.log_loss(epoch, value / len(train_comp.train_loader), f"loss_train/{key}", train_comp.writer)
     
     return loss_vals
 

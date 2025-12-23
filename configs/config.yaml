@@ -27,10 +27,13 @@ train:
   logging:
     log_dir: tb_logger/
     log_io_n_batches: 10
-    log_lr_n_batches: 50 
+    log_lr_n_batches: 50
+    log_curr_loss_n_batches: 1
   epoches: 5000
   losses:
     lambda_gan_g: 0.15
 
 test:
   resize_size: 256
+  logging:
+    log_curr_mets_n_batches: 1
