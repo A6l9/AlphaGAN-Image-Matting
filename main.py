@@ -36,7 +36,7 @@ def get_discriminator(device: tch.device) -> sch.DComponents:
 
     # Define optimizer and scheduler for the discriminator
     d_optimizer = optim.AdamW(discriminator.parameters(),
-                            lr=float(cfg.train.scheduler.start_lr),
+                            lr=float(cfg.train.scheduler.D.start_lr),
                             weight_decay=float(cfg.train.optimizer.weight_decay)
                             )
     d_scheduler = CyclicLR(
@@ -96,7 +96,7 @@ def main(csv_path: Path) -> None:
 
     # Define optimizer and scheduler for the generator
     g_optimizer = optim.AdamW(generator.parameters(),
-                            lr=float(cfg.train.scheduler.start_lr),
+                            lr=float(cfg.train.scheduler.G.start_lr),
                             weight_decay=float(cfg.train.optimizer.weight_decay)
                             )
     g_scheduler = CyclicLR(
@@ -174,5 +174,5 @@ def main(csv_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    csv_path = Path(__file__).parent / "dataset" / "dataset_labels_short.csv"
+    csv_path = Path(__file__).parent / "dataset" / "dataset_labels.csv"
     main(csv_path)
