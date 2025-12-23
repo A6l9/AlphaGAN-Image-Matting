@@ -127,6 +127,8 @@ def update_generator(
         target=compos[:, :3]
         )
     
+    loss_g_gan = 0.0
+    
     if train_comp.d_components:
         d_in_fake_for_g = utl.add_trimap(pred_compos, trim)
         d_fake_for_g = train_comp.d_components.discriminator(d_in_fake_for_g)
@@ -143,11 +145,16 @@ def update_generator(
     train_comp.g_optimizer.step()
     train_comp.g_scheduler.step()
 
-    return sch.GLosses(
-        alpha_loss=float(loss_alpha.item()),
-        compos_loss=float(loss_comp.item()),
-        gan_loss=float(loss_g_gan.item())
-    )
+    g_losses = sch.GLosses(
+                alpha_loss=float(loss_alpha.item()),
+                compos_loss=float(loss_comp.item()),
+                gan_loss=None
+            )
+    
+    if train_comp.d_components:
+        g_losses.gan_loss = float(loss_g_gan.item())
+    
+    return g_losses
 
 
 def update_discriminator(
