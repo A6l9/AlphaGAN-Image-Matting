@@ -109,6 +109,47 @@ def load_checkpoint(chkp_dir: Path, device: tch.device) -> dict:
     return last_checkpoint
 
 
+def make_checkpoint_dict(epoch: int, components: TrainComponents) -> dict:
+    """Builds a checkpoint dictionary for saving training state:
+        - epoch
+        - best loss
+        - generator state
+        - generator optimizer state
+        - generator scheduler state
+
+    If a discriminator is enabled (components.d_components is not None),
+    the checkpoint is extended with:
+        - discriminator state
+        - dicriminator optimizer state
+        - dicriminator scheduler state
+
+    Args:
+        epoch (int): Current epoch
+        components (TrainComponents): The train components
+
+    Returns:
+        dict: The checkpoint dict
+    """
+    checkpoint = {
+        "epoch": epoch,
+        "best_loss": components.best_loss,
+        "model_state": components.generator.state_dict(),
+        "g_optimizer_state": components.g_optimizer.state_dict(),
+        "g_scheduler_state": components.g_scheduler.state_dict()
+    }
+
+    if components.d_components:
+        checkpoint.update(
+            {
+                "discriminator_state": components.d_components.discriminator.state_dict(),
+                "d_optimizer_state": components.d_components.d_optimizer.state_dict(),
+                "d_scheduler_state": components.d_components.d_scheduler.state_dict()
+            }
+        )
+    
+    return checkpoint
+
+
 def save_checkpoint(chkp_dir: Path, components: TrainComponents, epoch: int) -> None:
     """Saves a training checkpoint
 
@@ -130,16 +171,7 @@ def save_checkpoint(chkp_dir: Path, components: TrainComponents, epoch: int) -> 
     if not chkp_dir.exists():
         chkp_dir.mkdir(parents=True, exist_ok=True)
 
-    checkpoint = {
-        "epoch": epoch,
-        "best_loss": components.best_loss,
-        "model_state": components.generator.state_dict(),
-        "discriminator_state": components.discriminator.state_dict(),
-        "g_optimizer_state": components.g_optimizer.state_dict(),
-        "d_optimizer_state": components.d_optimizer.state_dict(),
-        "g_scheduler_state": components.g_scheduler.state_dict(),
-        "d_scheduler_state": components.d_scheduler.state_dict()
-    }
+    checkpoint = make_checkpoint_dict(epoch, components)
 
     curr_date = datetime.strftime(datetime.now(), "%d-%m-%Y_%H:%M:%S")
     checkpoint_name = f"{epoch}_{curr_date}.pth"
@@ -175,16 +207,7 @@ def save_checkpoint_use_colab(chkp_dir: Path,
     if not chkp_dir.exists():
         chkp_dir.mkdir(parents=True, exist_ok=True)
 
-    checkpoint = {
-        "epoch": epoch,
-        "best_loss": components.best_loss,
-        "model_state": components.generator.state_dict(),
-        "discriminator_state": components.discriminator.state_dict(),
-        "g_optimizer_state": components.g_optimizer.state_dict(),
-        "d_optimizer_state": components.d_optimizer.state_dict(),
-        "g_scheduler_state": components.g_scheduler.state_dict(),
-        "d_scheduler_state": components.d_scheduler.state_dict()
-    }
+    checkpoint = make_checkpoint_dict(epoch, components)
 
     checkpoint_name = f"{checkpoint_name}.pth"
 
@@ -207,16 +230,25 @@ def color(text: str, name: str) -> str:
 
 
 def make_compos(fg: tch.Tensor, mask: tch.Tensor, bg: tch.Tensor, alpha: tch.Tensor) -> tch.Tensor:
-    """Overlays the foreground object on 
-    the background using alpha
+    """Compose a foreground over a background using a predicted alpha matte.
+
+    The foreground is first gated by the ground-truth mask (to suppress any
+    pixels outside the object), then alpha-blended onto the background using
+    the predicted alpha:
+
+        comp = alpha * (fg * mask) + (1 - alpha) * bg
 
     Args:
-        bg: (tch.Tensor) The background image
-        orig: (tch.Tensor) The foreground image
-        trimap: (tch.Tensor) The trimap of the foreground image
+        fg (tch.Tensor): Foreground RGB tensor of shape (B, 3, H, W) or (3, H, W).
+        mask (tch.Tensor): Ground-truth mask/alpha tensor used to gate the foreground.
+            Shape (B, 1, H, W) or (1, H, W). Expected to be in [0, 1].
+        bg (tch.Tensor): Background RGB tensor of shape (B, 3, H, W) or (3, H, W).
+        alpha (tch.Tensor): Predicted alpha matte used for blending.
+            Shape (B, 1, H, W) or (1, H, W). Expected to be in [0, 1].
 
     Returns:
-        tch.Tensor: The composite
+        tch.Tensor: Composite RGB tensor with the same spatial size as `bg`,
+            shape (B, 3, H, W) or (3, H, W).
     """
     return alpha * (fg * mask) + (1.0 - alpha) * bg
 

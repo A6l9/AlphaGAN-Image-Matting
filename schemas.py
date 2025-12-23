@@ -1,8 +1,8 @@
+import typing as tp
 from dataclasses import dataclass
 
 import torch as tch
 import torch.nn as nn
-from tqdm import tqdm
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr
 from torch.utils.data import DataLoader
@@ -12,22 +12,27 @@ import losses as ls
 
 
 @dataclass
+class DComponents:
+    discriminator: nn.Module
+    d_optimizer: optim.Optimizer
+    d_scheduler: lr.LRScheduler
+    gan_loss: ls.BaseLoss
+
+
+@dataclass
 class TrainComponents:
     device: tch.device
     epoch: int
     best_loss: float
     generator: nn.Module
-    discriminator: nn.Module
     train_loader: DataLoader
     test_loader: DataLoader
     g_optimizer: optim.Optimizer
     g_scheduler: lr.LRScheduler
-    d_optimizer: optim.Optimizer
-    d_scheduler: lr.LRScheduler
     l_alpha_loss: ls.BaseLoss
     l_comp_loss: ls.BaseLoss
-    gan_loss: ls.BaseLoss
     writer: SummaryWriter
+    d_components: tp.Optional[DComponents]
 
 
 @dataclass
@@ -58,3 +63,15 @@ class TrainLossValues(BaseLossValues):
 class TestLossValues(BaseLossValues):
     l1_alpha_loss: float = 0.0
     l1_compos_loss: float = 0.0
+
+@dataclass
+class DLosses:
+    loss_d_real: float
+    loss_d_fake: float
+    loss_d: float
+
+@dataclass
+class GLosses:
+    alpha_loss: float
+    compos_loss: float
+    gan_loss: tp.Optional[float]

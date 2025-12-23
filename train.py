@@ -82,11 +82,121 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
     return loss_vals
 
 
+def update_generator(
+                    fg: tch.Tensor,
+                    bg: tch.Tensor,
+                    mask: tch.Tensor,
+                    compos: tch.Tensor,
+                    pred_compos: tch.Tensor, 
+                    trim: tch.Tensor, 
+                    alpha_pred: tch.Tensor, 
+                    train_comp: sch.TrainComponents
+                    ) -> sch.GLosses:
+    """Run one optimization step for the generator.
+
+    Computes the supervised matting losses:
+    - alpha L1 loss between predicted alpha and ground-truth mask
+    - composite L1 loss between predicted composite (using alpha_pred) and target RGB
+
+    If a discriminator is enabled, also adds the GAN loss that encourages the
+    discriminator to classify generated composites as real. The final generator
+    loss is a weighted sum of these terms.
+
+    Args:
+        fg (tch.Tensor): Foreground RGB tensor of shape (B, 3, H, W).
+        bg (tch.Tensor): Background RGB tensor of shape (B, 3, H, W).
+        mask (tch.Tensor): Ground-truth alpha/mask tensor of shape (B, 1, H, W).
+        compos (tch.Tensor): Input composite tensor (may include trimap channel),
+            expected shape (B, C, H, W) where C is 3 or 4.
+        pred_compos (tch.Tensor): Predicted composite RGB tensor of shape (B, 3, H, W).
+        trim (tch.Tensor): Trimap tensor of shape (B, 1, H, W).
+        alpha_pred (tch.Tensor): Predicted alpha tensor of shape (B, 1, H, W).
+        train_comp (sch.TrainComponents): Training state containing the generator,
+            losses, optimizer, scheduler, and optional discriminator components.
+
+    Returns:
+        sch.GLosses: Scalar loss values for logging (alpha, composite, and optional GAN).
+    """
+    train_comp.g_optimizer.zero_grad(set_to_none=True)
+
+    loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
+    loss_comp = train_comp.l_comp_loss(
+        alpha=alpha_pred, 
+        fg=fg,
+        bg=bg,
+        target=compos[:, :3]
+        )
+    
+    if train_comp.d_components:
+        d_in_fake_for_g = utl.add_trimap(pred_compos, trim)
+        d_fake_for_g = train_comp.d_components.discriminator(d_in_fake_for_g)
+
+        loss_g_gan = train_comp.d_components.gan_loss(pred=d_fake_for_g, is_real=True)
+    
+        # Calculate the generator loss; multiply the discriminator's loss by lambda to equalize with the rest 
+        loss_g = loss_alpha + loss_comp + (loss_g_gan * cfg.train.losses.lambda_gan_g)
+    else:
+        # Calculate the generator loss without the gan loss
+        loss_g = loss_alpha + loss_comp
+
+    loss_g.backward()
+    train_comp.g_optimizer.step()
+    train_comp.g_scheduler.step()
+
+    return sch.GLosses(
+        alpha_loss=float(loss_alpha.item()),
+        compos_loss=float(loss_comp.item()),
+        gan_loss=float(loss_g_gan.item())
+    )
+
+
+def update_discriminator(
+                         compos: tch.Tensor,
+                         pred_compos: tch.Tensor,
+                         trim: tch.Tensor,
+                         train_comp: sch.TrainComponents
+                         ) -> sch.DLosses:
+    """Run one optimization step for the discriminator.
+
+    Args:
+        compos (tch.Tensor): Real composite tensor fed to the discriminator, shape (B, C, H, W).
+        pred_compos (tch.Tensor): Generated composite RGB tensor of shape (B, 3, H, W).
+        trim (tch.Tensor): Trimap tensor of shape (B, 1, H, W).
+        train_comp (sch.TrainComponents): Training state containing discriminator components,
+            GAN loss, optimizer, and scheduler.
+
+    Returns:
+        sch.DLosses: Scalar loss values for logging (real loss, fake loss, and total D loss).
+    """
+    train_comp.d_components.d_optimizer.zero_grad(set_to_none=True)
+
+    d_in_real = compos
+    d_in_fake = utl.add_trimap(pred_compos.detach(), trim)
+
+    d_real = train_comp.d_components.discriminator(d_in_real)
+    d_fake = train_comp.d_components.discriminator(d_in_fake)
+
+    loss_d_real = train_comp.d_components.gan_loss(pred=d_real, is_real=True)
+    loss_d_fake = train_comp.d_components.gan_loss(pred=d_fake, is_real=False)
+
+    loss_d = 0.5 * (loss_d_real + loss_d_fake)
+
+    loss_d.backward()
+    train_comp.d_components.d_optimizer.step()
+    train_comp.d_components.d_scheduler.step()
+
+    return sch.DLosses(
+        loss_d_real=float(loss_d_real.item()),
+        loss_d_fake=float(loss_d_fake.item()),
+        loss_d=float(loss_d.item())
+    )
+
+
 def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.TrainComponents, prog_bar: tqdm) -> sch.TrainLossValues:
     """Run one training epoch for generator and discriminator.
 
     This function performs adversarial training in the following order per batch:
-    1) Update discriminator (D) using:
+    1) Update discriminator (D) (if train_comp.d_components != None) using:
        - real composite+trimap as positive samples
        - generated composite+trimap (detached) as negative samples
     2) Update generator (G) using a weighted sum of:
@@ -108,7 +218,9 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         sch.TrainLossValues: Updated loss_vals containing accumulated losses for the epoch.
     """
     train_comp.generator.train()
-    train_comp.discriminator.train()
+
+    if train_comp.d_components:
+        train_comp.d_components.discriminator.train()
 
     for i, batch in prog_bar:
         step = (epoch * len(train_comp.train_loader)) + i
@@ -123,66 +235,38 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
 
         pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
 
-        # Update D
-        train_comp.d_optimizer.zero_grad(set_to_none=True)
-
-        d_in_real = compos
-        d_in_fake = utl.add_trimap(pred_compos.detach(), trim)
-
-        d_real = train_comp.discriminator(d_in_real)
-        d_fake = train_comp.discriminator(d_in_fake)
-
-        loss_d_real = train_comp.gan_loss(pred=d_real, is_real=True)
-        loss_d_fake = train_comp.gan_loss(pred=d_fake, is_real=False)
-
-        loss_d = 0.5 * (loss_d_real + loss_d_fake)
-
-        loss_d.backward()
-        train_comp.d_optimizer.step()
-        train_comp.d_scheduler.step()
+        # Update D if train_comp.d_components != None
+        if train_comp.d_components:
+            d_losses = update_discriminator(compos, pred_compos, trim, train_comp)
 
         # Update G
-        train_comp.g_optimizer.zero_grad(set_to_none=True)
-
-        d_in_fake_for_g = utl.add_trimap(pred_compos, trim)
-        d_fake_for_g = train_comp.discriminator(d_in_fake_for_g)
-
-        loss_g_gan = train_comp.gan_loss(pred=d_fake_for_g, is_real=True)
-        loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
-        loss_comp = train_comp.l_comp_loss(
-            alpha=alpha_pred, 
-            fg=fg,
-            bg=bg,
-            target=compos[:, :3]
-            )
-        
-        # Calculate the generator loss; multiply the discriminator's loss by lambda to equalize with the rest 
-        loss_g = loss_alpha + loss_comp + (loss_g_gan * cfg.train.losses.lambda_gan_g) 
-
-        loss_g.backward()
-        train_comp.g_optimizer.step()
-        train_comp.g_scheduler.step()
+        g_losses = update_generator(fg, bg, mask, compos, pred_compos, trim, alpha_pred, train_comp)
 
         # Saving loss values
-        loss_vals.l1_alpha_loss += float(loss_alpha.item())
-        loss_vals.l1_compos_loss += float(loss_comp.item())
-        loss_vals.g_loss += float(loss_g_gan.item())
-        loss_vals.bce_fake_d_loss += float(loss_d_fake.item())
-        loss_vals.bce_real_d_loss += float(loss_d_real.item())
-        loss_vals.d_loss += float(loss_d.item())
+        loss_vals.l1_alpha_loss += g_losses.alpha_loss
+        loss_vals.l1_compos_loss += g_losses.compos_loss
+
+        # Saving GAN and D losses if train_comp.d_components != None
+        if train_comp.d_components:
+            loss_vals.g_loss += g_losses.gan_loss
+            loss_vals.bce_fake_d_loss += d_losses.loss_d_fake
+            loss_vals.bce_real_d_loss += d_losses.loss_d_real
+            loss_vals.d_loss += d_losses.loss_d
 
         # Logging learning rates every 'log_lr_n_batches' batches
         if (i + 1) % cfg.train.logging.log_lr_n_batches == 0:
             utl.log_lr(
                 step, 
-                train_comp.d_optimizer.param_groups[0]["lr"],
-                "D",
-                train_comp.writer
-            )
-            utl.log_lr(
-                step, 
                 train_comp.g_optimizer.param_groups[0]["lr"],
                 "G",
+                train_comp.writer
+            )
+
+            if train_comp.d_components:
+                utl.log_lr(
+                step, 
+                train_comp.d_components.d_optimizer.param_groups[0]["lr"],
+                "D",
                 train_comp.writer
             )
         

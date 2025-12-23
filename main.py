@@ -14,29 +14,69 @@ from cfg_loader import cfg
 from transforms import TransformsPipeline
 import losses as ls
 from train import train_pipeline
-from schemas import TrainComponents
+import schemas as sch
+
+
+def get_discriminator(device: tch.device) -> sch.DComponents:
+    """Build and configure the discriminator training components.
+
+    This helper creates a discriminator, moves it to the target device,
+    and initializes its optimizer, learning-rate scheduler, and GAN loss.
+
+    Args:
+        device (tch.device): Device to run the discriminator on (e.g. CPU or CUDA).
+
+    Returns:
+        sch.DComponents: A container with the discriminator module, optimizer,
+            scheduler, and GAN loss instance.
+    """
+    # Define the discriminator
+    discriminator = mdl.PatchGANDiscriminator(4, nn.BatchNorm2d)
+    discriminator.to(device)
+
+    # Define optimizer and scheduler for the discriminator
+    d_optimizer = optim.AdamW(discriminator.parameters(),
+                            lr=float(cfg.train.scheduler.start_lr),
+                            weight_decay=float(cfg.train.optimizer.weight_decay)
+                            )
+    d_scheduler = CyclicLR(
+                        d_optimizer,
+                        base_lr=float(cfg.train.scheduler.D.start_lr),
+                        max_lr=float(cfg.train.scheduler.D.end_lr), 
+                        step_size_up=cfg.train.scheduler.D.step_size_up,
+                        mode='triangular'
+                    )
+    
+    # Define the GAN loss
+    gan_loss = ls.GANLoss()
+
+    d_components = sch.DComponents(
+        discriminator=discriminator,
+        d_optimizer=d_optimizer,
+        d_scheduler=d_scheduler,
+        gan_loss=gan_loss
+    )
+    
+    return d_components
 
 
 def main(csv_path: Path) -> None:
     """Prepares components and setup the train loop
-
+    
     Args:
         csv_path (Path): The path to the dataset labels
     """
     # Define an available device
     DEVICE = tch.device("cuda" if tch.cuda.is_available() else "cpu")
     
-    # Define generator and dicsriminator
+    # Define generator
     generator = mdl.AlphaGenerator()
     generator.to(DEVICE)
-
-    discriminator = mdl.PatchGANDiscriminator(4, nn.BatchNorm2d)
-    discriminator.to(DEVICE)
 
     transforms = TransformsPipeline()
 
     # Prepare train and test datasets
-    dataset_train = CustomDataset(csv_path, train=True, transforms=transforms)
+    dataset_train = CustomDataset(csv_path, device=DEVICE, train=True, transforms=transforms)
     train_dataloader = DataLoader(
         dataset_train,
         batch_size=cfg.general.batch_size,
@@ -44,7 +84,8 @@ def main(csv_path: Path) -> None:
         num_workers=utl.get_num_workers(),
         pin_memory=True
     )
-    dataset_test = CustomDataset(csv_path, train=False, transforms=transforms)
+
+    dataset_test = CustomDataset(csv_path, device=DEVICE, train=False, transforms=transforms)
     test_dataloader = DataLoader(
         dataset_test,
         batch_size=cfg.general.batch_size,
@@ -53,38 +94,32 @@ def main(csv_path: Path) -> None:
         pin_memory=True
     )
 
-    # Define optimizer and scheduler for the discriminator and the generator
+    # Define optimizer and scheduler for the generator
     g_optimizer = optim.AdamW(generator.parameters(),
                             lr=float(cfg.train.scheduler.start_lr),
                             weight_decay=float(cfg.train.optimizer.weight_decay)
                             )
     g_scheduler = CyclicLR(
                         g_optimizer,
-                        base_lr=float(cfg.train.scheduler.start_lr),
-                        max_lr=float(cfg.train.scheduler.end_lr), 
-                        step_size_up=cfg.train.scheduler.step_size_up,
-                        mode='triangular'
-                    )
-    
-    d_optimizer = optim.AdamW(discriminator.parameters(),
-                            lr=float(cfg.train.scheduler.start_lr),
-                            weight_decay=float(cfg.train.optimizer.weight_decay)
-                            )
-    d_scheduler = CyclicLR(
-                        d_optimizer,
-                        base_lr=float(cfg.train.scheduler.start_lr),
-                        max_lr=float(cfg.train.scheduler.end_lr), 
-                        step_size_up=cfg.train.scheduler.step_size_up,
+                        base_lr=float(cfg.train.scheduler.G.start_lr),
+                        max_lr=float(cfg.train.scheduler.G.end_lr), 
+                        step_size_up=cfg.train.scheduler.G.step_size_up,
                         mode='triangular'
                     )
     
     # Define losses
     l_alpha_loss = ls.LAlphaLoss()
     l_comp_loss = ls.LCompositeLoss()
-    gan_loss = ls.GANLoss()
 
-    # Define the best test loss
-    best_loss = 1.0
+    # Initialize the discriminator if 'train.use_d_loss' == 1
+    d_components = None
+
+    if cfg.train.use_d_loss:
+        print(utl.color("Selected a training without a discriminator", "yellow"))
+        d_components = get_discriminator(DEVICE)
+
+    # Define the best test loss. Default 'inf'
+    best_loss = float("inf")
         
     # Define the checkpoints dir and the logging dir paths
     checkpoints_dir = Path(cfg.general.checkpoints_dir).absolute()
@@ -96,13 +131,15 @@ def main(csv_path: Path) -> None:
         print(utl.color("Checkpoint found, loading states...", "green"))
 
         generator.load_state_dict(checkpoint["model_state"])
-        discriminator.load_state_dict(checkpoint["discriminator_state"])
 
         g_optimizer.load_state_dict(checkpoint["g_optimizer_state"])
-        d_optimizer.load_state_dict(checkpoint["d_optimizer_state"])
 
         g_scheduler.load_state_dict(checkpoint["g_scheduler_state"])
-        d_scheduler.load_state_dict(checkpoint["d_scheduler_state"])
+
+        if d_components: 
+            d_components.discriminator.load_state_dict(checkpoint["discriminator_state"])
+            d_components.d_optimizer.load_state_dict(checkpoint["d_optimizer_state"])
+            d_components.d_scheduler.load_state_dict(checkpoint["d_scheduler_state"])
 
         best_loss = checkpoint["best_loss"]
 
@@ -114,28 +151,28 @@ def main(csv_path: Path) -> None:
     # Create the tb logger
     with SummaryWriter(Path(cfg.train.logging.log_dir)) as writer:
         # Package it for train pipeline
-        components = TrainComponents(
+        components = sch.TrainComponents(
             device=DEVICE,
             generator=generator,
             epoch=curr_epoch,
             best_loss=best_loss,
-            discriminator=discriminator,
             train_loader=train_dataloader,
             test_loader=test_dataloader,
             g_optimizer=g_optimizer,
             g_scheduler=g_scheduler,
-            d_optimizer=d_optimizer,
-            d_scheduler=d_scheduler,
             l_alpha_loss=l_alpha_loss,
             l_comp_loss=l_comp_loss,
-            gan_loss=gan_loss,
-            writer=writer
+            writer=writer,
+            d_components=None
         )
+
+        if d_components:
+            components.d_components = d_components 
 
         # Start the train pipeline
         train_pipeline(components)
 
 
 if __name__ == "__main__":
-    csv_path = Path(__file__).parent / "dataset" / "dataset_labels.csv"
+    csv_path = Path(__file__).parent / "dataset" / "dataset_labels_short.csv"
     main(csv_path)
