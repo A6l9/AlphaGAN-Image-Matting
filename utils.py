@@ -116,9 +116,6 @@ def make_checkpoint_dict(epoch: int, components: TrainComponents) -> dict:
         - generator state
         - generator optimizer state
         - generator scheduler state
-
-    If a discriminator is enabled (components.d_components is not None),
-    the checkpoint is extended with:
         - discriminator state
         - dicriminator optimizer state
         - dicriminator scheduler state
@@ -135,18 +132,12 @@ def make_checkpoint_dict(epoch: int, components: TrainComponents) -> dict:
         "best_loss": components.best_loss,
         "model_state": components.generator.state_dict(),
         "g_optimizer_state": components.g_optimizer.state_dict(),
-        "g_scheduler_state": components.g_scheduler.state_dict()
+        "g_scheduler_state": components.g_scheduler.state_dict(),
+        "discriminator_state": components.d_components.discriminator.state_dict(),
+        "d_optimizer_state": components.d_components.d_optimizer.state_dict(),
+        "d_scheduler_state": components.d_components.d_scheduler.state_dict()
     }
 
-    if components.d_components:
-        checkpoint.update(
-            {
-                "discriminator_state": components.d_components.discriminator.state_dict(),
-                "d_optimizer_state": components.d_components.d_optimizer.state_dict(),
-                "d_scheduler_state": components.d_components.d_scheduler.state_dict()
-            }
-        )
-    
     return checkpoint
 
 
@@ -297,7 +288,7 @@ def denorm_imagenet_rgb(x: tch.Tensor) -> tch.Tensor:
 def log_loss(
             epoch: int,
             loss_value: float, 
-            loss_name: str, 
+            tag: str, 
             writer: SummaryWriter
             ) -> None:
     """Logs the loss value for an epoch 
@@ -305,10 +296,10 @@ def log_loss(
     Args:
         epoch (int): The current epoch
         loss_value (float): The loss value
-        loss_name (str): The loss name
+        tag (str): The tag for showing in the tb
         writer (SummaryWriter): TensorBoard SummaryWriter instance used for logging.
     """
-    writer.add_scalar(f"loss/{loss_name}", loss_value, epoch)
+    writer.add_scalar(tag, loss_value, epoch)
 
 
 def log_lr(

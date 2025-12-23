@@ -32,7 +32,8 @@ class TrainComponents:
     l_alpha_loss: ls.BaseLoss
     l_comp_loss: ls.BaseLoss
     writer: SummaryWriter
-    d_components: tp.Optional[DComponents]
+    d_components: DComponents
+    use_gan_loss: bool=True
 
 
 @dataclass
@@ -74,4 +75,4 @@ class DLosses:
 class GLosses:
     alpha_loss: float
     compos_loss: float
-    gan_loss: tp.Optional[float]
+    gan_loss: float = 0.0
