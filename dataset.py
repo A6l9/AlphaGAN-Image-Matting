@@ -5,6 +5,7 @@ from PIL import Image
 from pathlib import Path
 
 import pandas as pd
+import torch as tch
 from torch.utils.data import Dataset
 
 import utils as utl
@@ -13,12 +14,14 @@ from transforms import TransformsPipeline
 
 
 class CustomDataset(Dataset):
-    def __init__(self, csv_path: Path, transforms: TransformsPipeline, train: bool=False) -> None:
+    def __init__(self, csv_path: Path, transforms: TransformsPipeline, device: tch.device, train: bool=False) -> None:
         self.train = train
         split = "train" if self.train else "test"
         paths = pd.read_csv(csv_path)
         self.compos_paths = paths[paths["split"] == split].reset_index(drop=True)
         self.transforms = transforms
+
+        self.device = device
     
     def load_images(self, 
                   orig_path: Path, 
@@ -66,7 +69,7 @@ class CustomDataset(Dataset):
 
         orig, trim, mask, bg = self.load_images(orig, trim, mask, bg)
 
-        result = self.transforms(orig, trim, mask, bg, train=self.train)
+        result = self.transforms(orig, trim, mask, bg, self.device, train=self.train)
 
         return result
 

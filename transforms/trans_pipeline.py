@@ -13,7 +13,12 @@ class TransformsPipeline:
     norm_tfs = models.NormalizeTransforms
 
     @classmethod
-    def build_train_sample(cls, orig: tch.Tensor, trim: tch.Tensor, mask: tch.Tensor, bg: tch.Tensor) -> dict:
+    def build_train_sample(cls, orig: tch.Tensor, 
+                           trim: tch.Tensor, 
+                           mask: tch.Tensor, 
+                           bg: tch.Tensor,
+                           device: tch.device
+                           ) -> dict:
         """Builds a train sample and applies augmentations
 
         Args:
@@ -21,6 +26,7 @@ class TransformsPipeline:
             mask (tch.Tensor): Mask image as a tensor
             trim (tch.Tensor): Trimap image as a tensor
             bg (tch.Tensor): Background image as a tensor
+            device (tch.device): Device on which tensors will be allocated
 
         Returns:
             dict: The prepared composite, trimap, mask, foreground image and background
@@ -30,9 +36,9 @@ class TransformsPipeline:
         orig_fl, trim_fl, mask_fl = cls.geom_tfs.random_hflip(orig_scl, trim_scl, mask_scl, prob=0.6)
 
         orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_fl, trim_fl, mask_fl, bg)
-        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg)
+        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg, device)
 
-        compos_crop, trim_crop, mask_crop, orig_crop, bg_crop = cls.crop_tfs.random_gray_crop(compos, 
+        compos_crop, trim_crop, mask_crop, orig_crop, bg_crop = cls.crop_tfs.random_unknown_crop(compos, 
                                                                                             trim_comp, 
                                                                                             mask_comp,
                                                                                             orig_comp,
@@ -55,7 +61,12 @@ class TransformsPipeline:
         }
 
     @classmethod
-    def build_test_sample(cls, orig: tch.Tensor, trim: tch.Tensor, mask: tch.Tensor, bg: tch.Tensor) -> dict:
+    def build_test_sample(cls, orig: tch.Tensor, 
+                          trim: tch.Tensor, 
+                          mask: tch.Tensor, 
+                          bg: tch.Tensor,
+                          device: tch.device
+                          ) -> dict:
         """Builds a test sample without any augmentations
 
         Args:
@@ -63,6 +74,7 @@ class TransformsPipeline:
             mask (tch.Tensor): Mask image as a tensor
             trim (tch.Tensor): Trimap image as a tensor
             bg (tch.Tensor): Background image as a tensor
+            device (tch.device): Device on which tensors will be allocated
 
         Returns:
             dict: The prepared orig, trimap and mask
@@ -73,7 +85,7 @@ class TransformsPipeline:
         bg_res = cls.geom_tfs.resize(bg, T.InterpolationMode.BILINEAR)
 
         orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_res, trim_res, mask_res, bg_res)
-        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg_res)
+        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.center_placement(orig_res, trim_res, mask_res, bg_res, device)
 
         compos_trim = cls.compos_tfs.concat_image_and_trimap(compos, trim_comp)
         compos_norm = cls.norm_tfs.normalize(compos_trim, imgnet=True)
@@ -91,7 +103,12 @@ class TransformsPipeline:
         }
     
     @classmethod
-    def __call__(cls, orig: Image.Image, trim: Image.Image, mask: Image.Image, bg: Image.Image, train: bool=True) -> dict:
+    def __call__(cls, orig: Image.Image, 
+                 trim: Image.Image, 
+                 mask: Image.Image, 
+                 bg: Image.Image, 
+                 device: tch.device, 
+                 train: bool=True) -> dict:
         """Full augmentation and compositing pipeline:
 
         - converts all PIL images to tensors;
@@ -108,6 +125,7 @@ class TransformsPipeline:
             trim (Image.Image): Trimap PIL image (mode "L").
             mask (Image.Image): Mask PIL image (mode "L").
             bg (Image.Image): Background RGB PIL image.
+            device (tch.device): Device on which tensors will be allocated
             train (bool, optional): If True.
 
         Returns:
@@ -122,6 +140,6 @@ class TransformsPipeline:
         bg_ten = cls.norm_tfs.to_tensor(bg)
 
         if train:
-            return cls.build_train_sample(orig_ten, trim_ten, mask_ten, bg_ten)
+            return cls.build_train_sample(orig_ten, trim_ten, mask_ten, bg_ten, device)
 
-        return cls.build_test_sample(orig_ten, trim_ten, mask_ten, bg_ten)
+        return cls.build_test_sample(orig_ten, trim_ten, mask_ten, bg_ten, device)
