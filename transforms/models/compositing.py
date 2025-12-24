@@ -11,8 +11,7 @@ class CompositingTransforms(BaseTransform):
                          orig: tch.Tensor,
                          trim: tch.Tensor,
                          mask: tch.Tensor,
-                         bg: tch.Tensor,
-                         device: tch.device
+                         bg: tch.Tensor
                          ) -> tuple[tch.Tensor, 
                                     tch.Tensor, 
                                     tch.Tensor, 
@@ -26,7 +25,6 @@ class CompositingTransforms(BaseTransform):
             trim (tch.Tensor): Trimap tensor of shape (1, H, W).
             mask (tch.Tensor): Alpha/mask tensor of shape (1, H, W) with values in [0, 255].
             bg (tch.Tensor): Background RGB tensor of shape (3, H, W).
-            device (tch.device): Device on which tensors will be allocated
 
         Returns:
             tuple[tch.Tensor, tch.Tensor, tch.Tensor, tch.Tensor, tch.Tensor]:
@@ -65,12 +63,12 @@ class CompositingTransforms(BaseTransform):
         final = bg.clone()
         final[:, y_rand:y_rand+h_orig, x_rand:x_rand+w_orig] = comp
 
-        trim_big = tch.zeros((1, h_bg, w_bg), device=device)
-        mask_big = tch.zeros((1, h_bg, w_bg), device=device)
+        trim_big = tch.zeros((1, h_bg, w_bg))
+        mask_big = tch.zeros((1, h_bg, w_bg))
         trim_big[:, y_rand:y_rand+h_orig, x_rand:x_rand+w_orig] = trim_obj
         mask_big[:, y_rand:y_rand+h_orig, x_rand:x_rand+w_orig] = mask_obj
 
-        orig_big = tch.zeros_like(bg, device=device)
+        orig_big = tch.zeros_like(bg)
         orig_big[:, y_rand:y_rand+h_orig, x_rand:x_rand+w_orig] = orig_obj
 
         return final, trim_big, mask_big, orig_big, bg
@@ -80,8 +78,7 @@ class CompositingTransforms(BaseTransform):
                          orig: tch.Tensor,
                          trim: tch.Tensor,
                          mask: tch.Tensor,
-                         bg: tch.Tensor,
-                         device: tch.device
+                         bg: tch.Tensor
                          ) -> tuple[tch.Tensor, 
                                     tch.Tensor, 
                                     tch.Tensor, 
@@ -95,7 +92,6 @@ class CompositingTransforms(BaseTransform):
             mask (tch.Tensor): Foreground mask/alpha tensor of shape (1, H, W).
                 Expected to be in [0, 255] (uint8-like) or already scaled accordingly.
             bg (tch.Tensor): Background RGB image tensor of shape (3, H_bg, W_bg).
-            device (tch.device): Target device for newly created tensors.
 
         Raises:
             ValueError: If the mask has no non-zero pixels (empty object region).
@@ -138,12 +134,12 @@ class CompositingTransforms(BaseTransform):
         final = bg.clone()
         final[:, y_cent:y_cent+h_orig, x_cent:x_cent+w_orig] = comp
 
-        trim_big = tch.zeros((1, h_bg, w_bg), device=device)
-        mask_big = tch.zeros((1, h_bg, w_bg), device=device)
+        trim_big = tch.zeros((1, h_bg, w_bg))
+        mask_big = tch.zeros((1, h_bg, w_bg))
         trim_big[:, y_cent:y_cent+h_orig, x_cent:x_cent+w_orig] = trim_obj
         mask_big[:, y_cent:y_cent+h_orig, x_cent:x_cent+w_orig] = mask_obj
 
-        orig_big = tch.zeros_like(bg, device=device)
+        orig_big = tch.zeros_like(bg)
         orig_big[:, y_cent:y_cent+h_orig, x_cent:x_cent+w_orig] = orig_obj
 
         return final, trim_big, mask_big, orig_big, bg
