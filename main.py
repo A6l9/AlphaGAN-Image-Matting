@@ -76,7 +76,7 @@ def main(csv_path: Path) -> None:
     transforms = TransformsPipeline()
 
     # Prepare train and test datasets
-    dataset_train = CustomDataset(csv_path, device=DEVICE, train=True, transforms=transforms)
+    dataset_train = CustomDataset(csv_path, train=True, transforms=transforms)
     train_dataloader = DataLoader(
         dataset_train,
         batch_size=cfg.general.batch_size,
@@ -85,7 +85,7 @@ def main(csv_path: Path) -> None:
         pin_memory=True
     )
 
-    dataset_test = CustomDataset(csv_path, device=DEVICE, train=False, transforms=transforms)
+    dataset_test = CustomDataset(csv_path, train=False, transforms=transforms)
     test_dataloader = DataLoader(
         dataset_test,
         batch_size=cfg.general.batch_size,
