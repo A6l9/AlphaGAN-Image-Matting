@@ -163,10 +163,10 @@ def main(csv_path: Path) -> None:
             d_components=d_components
         )
                                            
-        if not cfg.train.use_d_loss:
+        if not cfg.train.use_gan_loss:
             print(utl.color("Selected a training without a discriminator", "yellow"))
 
-            components.use_gan_loss = bool(cfg.train.use_d_loss)
+            components.use_gan_loss = bool(cfg.train.use_gan_loss)
 
         # Start the train pipeline
         train_pipeline(components)
