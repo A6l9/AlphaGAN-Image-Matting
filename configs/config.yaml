@@ -10,7 +10,7 @@ general:
     last_chkp_name: last_chkp
 
 train:
-  use_d_loss: 1
+  use_gan_loss: 1
   save_chkp_n_epoches: 1
   crop_size: 256
   scheduler:
