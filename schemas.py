@@ -31,6 +31,7 @@ class TrainComponents:
     g_scheduler: lr.LRScheduler
     l_alpha_loss: ls.BaseLoss
     l_comp_loss: ls.BaseLoss
+    percept_loss: ls.BaseLoss
     writer: SummaryWriter
     d_components: DComponents
     use_gan_loss: bool=True
@@ -64,6 +65,7 @@ class TrainLossValues(BaseLossValues):
 class TestLossValues(BaseLossValues):
     l1_alpha_loss: float = 0.0
     l1_compos_loss: float = 0.0
+    percept_loss: float = 0.0
 
 @dataclass
 class DLosses:
