@@ -13,7 +13,7 @@ from dataset import CustomDataset
 from cfg_loader import cfg
 from transforms import TransformsPipeline
 import losses as ls
-from train import train_pipeline
+from train_pipeline import train_pipeline
 import schemas as sch
 
 
@@ -111,6 +111,12 @@ def main(csv_path: Path) -> None:
     l_alpha_loss = ls.LAlphaLoss()
     l_comp_loss = ls.LCompositeLoss()
 
+    # Define features extractor and perceptual loss
+    features_extractor = mdl.VGG(layer_indices=(3, 8, 13, 15), model_type="vgg16")
+    features_extractor.to(DEVICE)
+
+    percept_loss = ls.PerceptualLoss(features_extractor)
+
     # Initialize the discriminator
     d_components = get_discriminator(DEVICE)
 
@@ -159,6 +165,7 @@ def main(csv_path: Path) -> None:
             g_scheduler=g_scheduler,
             l_alpha_loss=l_alpha_loss,
             l_comp_loss=l_comp_loss,
+            percept_loss=percept_loss,
             writer=writer,
             d_components=d_components
         )
