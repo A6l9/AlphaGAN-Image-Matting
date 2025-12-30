@@ -165,5 +165,33 @@ class GeometryTransforms(BaseTransform):
         trim_scl = TF.resize(trim, [new_h, new_w], interpolation=T.InterpolationMode.NEAREST)
         mask_scl = TF.resize(mask, [new_h, new_w], interpolation=T.InterpolationMode.BILINEAR)
 
-
         return orig_scl, trim_scl, mask_scl
+
+    @classmethod
+    def random_background_scale(cls,
+                     bg: tch.Tensor,
+                     len_range: tuple[int, int]=(2000, 6000)
+                     ) -> tch.Tensor:
+        """Randomly choose a target long-side length and compute the corresponding resize scale.
+
+        Args:
+            bg: Background image tensor in CHW format (C, H, W).
+            len_range: Inclusive range (min_len, max_len) in pixels to sample the target long-side length.
+
+        Returns:
+            tch.Tensor: A resized background tensor in CHW format (C, H, W), where the resize factor
+            is derived from the sampled target long-side length.
+        """
+        rand_len = random.randint(*len_range)
+
+        _, h, w = bg.shape
+        max_dim_idx = 1 if h >= w else 2
+
+        scale_ratio = rand_len / bg.shape[max_dim_idx]
+
+        new_h = int(h * scale_ratio)
+        new_w = int(w * scale_ratio)
+
+        bg_scl = TF.resize(bg, [new_h, new_w], interpolation=T.InterpolationMode.BILINEAR)
+
+        return bg_scl
