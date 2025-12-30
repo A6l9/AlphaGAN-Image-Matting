@@ -59,7 +59,7 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
         if (i + 1) % cfg.test.logging.log_curr_mets_n_batches == 0:
             utl.log_loss(step, float(loss_alpha.item()), f"curr_mets_test/alpha_loss", train_comp.writer)
             utl.log_loss(step, float(loss_comp.item()), f"curr_mets_test/compos_loss", train_comp.writer)
-            utl.log_loss(step, float(loss_comp.item()), f"curr_mets_test/percept_loss", train_comp.writer)
+            utl.log_loss(step, float(percept_loss.item()), f"curr_mets_test/percept_loss", train_comp.writer)
 
         # Saving loss values
         loss_vals.l1_alpha_loss += float(loss_alpha.item())
