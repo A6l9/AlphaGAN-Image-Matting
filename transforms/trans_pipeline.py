@@ -33,8 +33,10 @@ class TransformsPipeline:
         orig_scl, trim_scl, mask_scl = cls.geom_tfs.random_scale(orig_rot, trim_rot, mask_rot, prob=0.6)
         orig_fl, trim_fl, mask_fl = cls.geom_tfs.random_hflip(orig_scl, trim_scl, mask_scl, prob=0.6)
 
-        orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_fl, trim_fl, mask_fl, bg)
-        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg)
+        bg_res = cls.geom_tfs.random_background_scale(bg)
+
+        orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_fl, trim_fl, mask_fl, bg_res)
+        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg_res)
 
         compos_crop, trim_crop, mask_crop, orig_crop, bg_crop = cls.crop_tfs.random_unknown_crop(compos, 
                                                                                             trim_comp, 
