@@ -77,10 +77,10 @@ class TransformsPipeline:
         Returns:
             dict: The prepared orig, trimap and mask
         """
-        orig_res = cls.geom_tfs.resize(orig, T.InterpolationMode.BILINEAR)
-        trim_res = cls.geom_tfs.resize(trim, T.InterpolationMode.NEAREST)
-        mask_res = cls.geom_tfs.resize(mask, T.InterpolationMode.BILINEAR)
-        bg_res = cls.geom_tfs.resize(bg, T.InterpolationMode.BILINEAR)
+        orig_res = cls.geom_tfs.resize(orig, T.InterpolationMode.BILINEAR, cfg.test.resize_size)
+        trim_res = cls.geom_tfs.resize(trim, T.InterpolationMode.NEAREST, cfg.test.resize_size)
+        mask_res = cls.geom_tfs.resize(mask, T.InterpolationMode.BILINEAR, cfg.test.resize_size)
+        bg_res = cls.geom_tfs.resize(bg, T.InterpolationMode.BILINEAR, cfg.test.resize_size)
 
         orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_res, trim_res, mask_res, bg_res)
         compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.center_placement(orig_res, trim_res, mask_res, bg_res)
