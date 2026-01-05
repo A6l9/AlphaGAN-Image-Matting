@@ -32,6 +32,8 @@ train:
   epoches: 5000
   losses:
     lambda_gan_g: 0.15
+    lambda_alpha_g: 1.0
+    lambda_comp_g: 1.0
 
 test:
   resize_size: 256

@@ -59,11 +59,18 @@ def update_generator(
 
         loss_g_gan = train_comp.d_components.gan_loss(pred=d_fake_for_g, is_real=True)
     
-        # Calculate the generator loss; multiply the discriminator's loss by lambda to equalize with the rest 
-        loss_g = loss_alpha + loss_comp + (loss_g_gan * cfg.train.losses.lambda_gan_g)
+        # Calculate the weighted generator loss;
+        weighted_alpha = (loss_alpha * cfg.train.losses.lambda_alpha_g)
+        weighted_comp = (loss_comp * cfg.train.losses.lambda_comp_g)
+        weighted_gan = (loss_g_gan * cfg.train.losses.lambda_gan_g)
+
+        loss_g = weighted_alpha + weighted_comp + weighted_gan
     else:
-        # Calculate the generator loss without the gan loss
-        loss_g = loss_alpha + loss_comp
+        # Calculate the weighted generator loss without the gan loss
+        weighted_alpha = (loss_alpha * cfg.train.losses.lambda_alpha_g)
+        weighted_comp = (loss_comp * cfg.train.losses.lambda_comp_g)
+
+        loss_g = weighted_alpha + weighted_comp
 
     loss_g.backward()
     train_comp.g_optimizer.step()
