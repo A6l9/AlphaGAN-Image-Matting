@@ -4,6 +4,7 @@ import torchvision.transforms.v2 as T
 
 from cfg_loader import cfg
 from . import models
+import utils as utl
 
 
 class TransformsPipeline:
@@ -77,20 +78,24 @@ class TransformsPipeline:
         Returns:
             dict: The prepared orig, trimap and mask
         """
-        orig_res = cls.geom_tfs.resize(orig, T.InterpolationMode.BILINEAR, cfg.test.resize_size)
-        trim_res = cls.geom_tfs.resize(trim, T.InterpolationMode.NEAREST, cfg.test.resize_size)
-        mask_res = cls.geom_tfs.resize(mask, T.InterpolationMode.BILINEAR, cfg.test.resize_size)
-        bg_res = cls.geom_tfs.resize(bg, T.InterpolationMode.BILINEAR, cfg.test.resize_size)
+        orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig, trim, mask, bg)
+        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.center_placement(orig_res, trim_res, mask_res, bg)
 
-        orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_res, trim_res, mask_res, bg_res)
-        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.center_placement(orig_res, trim_res, mask_res, bg_res)
+        with utl.set_seed(cfg.general.random_seed, use_cuda=False):
+            compos_crop, trim_crop, mask_crop, orig_crop, bg_crop = cls.crop_tfs.random_unknown_crop(compos, 
+                                                                                                trim_comp, 
+                                                                                                mask_comp,
+                                                                                                orig_comp,
+                                                                                                bg_comp,
+                                                                                                cfg.test.resize_size
+                                                                                                )
 
-        compos_trim = cls.compos_tfs.concat_image_and_trimap(compos, trim_comp)
+        compos_trim = cls.compos_tfs.concat_image_and_trimap(compos_crop, trim_crop)
         compos_norm = cls.norm_tfs.normalize(compos_trim, imgnet=True)
-        mask_norm = cls.norm_tfs.normalize(mask_comp)
+        mask_norm = cls.norm_tfs.normalize(mask_crop)
         
-        orig_norm = cls.norm_tfs.normalize(orig_comp, imgnet=True)
-        bg_norm = cls.norm_tfs.normalize(bg_comp, imgnet=True)
+        orig_norm = cls.norm_tfs.normalize(orig_crop, imgnet=True)
+        bg_norm = cls.norm_tfs.normalize(bg_crop, imgnet=True)
 
         return {
             "compos": compos_norm,
