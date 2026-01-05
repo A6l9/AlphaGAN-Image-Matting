@@ -24,27 +24,30 @@ COLORS = {
 
 
 @contextmanager
-def set_seed(seed: int) -> tp.Generator:
-    """Temporarily sets the random seed for Python's `random`, 
-    PyTorch CPU RNG, and CUDA RNG.
+def set_seed(seed: int, use_cuda: bool=True) -> tp.Generator:
+    """Temporarily sets RNG seeds for deterministic behavior.
 
-    This context manager ensures fully deterministic behavior
-    inside the `with` block while preserving and restoring all
-    previous RNG states afterwards.
+    This context manager saves and restores RNG states while temporarily setting the
+    random seed for Python's `random` and PyTorch CPU RNG. Optionally, it can also
+    set and restore CUDA RNG states.
 
     Args:
-        seed (int): The random seed to use temporarily.
+        seed: The random seed to use temporarily.
+        use_cuda: If True, also seed and restore CUDA RNG states.
 
     Example:
-        with temporary_seed(42):
-            # deterministic random operations here
-            x = torch.rand(1)
-    # Outside the block, RNG states are restored.
+        with set_seed(42, use_cuda=False):
+            # Deterministic CPU-side random operations here
+            ...
+        # Outside the block, RNG states are restored.
     """
     random_state = random.getstate()
     torch_state = tch.get_rng_state()
     cuda_states = None
-    if tch.cuda.is_available():
+
+    use_cuda = use_cuda and tch.cuda.is_available()
+
+    if use_cuda:
         cuda_states = tch.cuda.get_rng_state_all()
     
     cudnn_det = tch.backends.cudnn.deterministic
@@ -53,7 +56,7 @@ def set_seed(seed: int) -> tp.Generator:
     try:
         random.seed(seed)
         tch.manual_seed(seed)
-        if tch.cuda.is_available():
+        if use_cuda:
             tch.cuda.manual_seed_all(seed)
 
         tch.backends.cudnn.deterministic = True
@@ -64,7 +67,7 @@ def set_seed(seed: int) -> tp.Generator:
     finally:
         random.setstate(random_state)
         tch.set_rng_state(torch_state)
-        if tch.cuda.is_available():
+        if use_cuda and cuda_states is not None:
             tch.cuda.set_rng_state_all(cuda_states)
 
         tch.backends.cudnn.deterministic = cudnn_det
