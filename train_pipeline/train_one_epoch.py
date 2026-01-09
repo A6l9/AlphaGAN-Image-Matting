@@ -41,7 +41,7 @@ def update_generator(
     Returns:
         sch.GLosses: Scalar loss values for logging (alpha, composite, and optional GAN).
     """
-    train_comp.g_optimizer.zero_grad(set_to_none=True)
+    train_comp.g_components.g_optimizer.zero_grad(set_to_none=True)
 
     with train_comp.amp_components.autocast:
         loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
@@ -78,11 +78,11 @@ def update_generator(
     # Do the backward step of the optimizer through the grad scaler if it is enabled
     if train_comp.amp_components.grad_scaler is None:
         loss_g.backward()
-        train_comp.g_optimizer.step()
+        train_comp.g_components.g_optimizer.step()
     else:
         train_comp.amp_components.grad_scaler.scale(loss_g).backward()
-        train_comp.amp_components.grad_scaler.step(train_comp.g_optimizer)
-    train_comp.g_scheduler.step()
+        train_comp.amp_components.grad_scaler.step(train_comp.g_components.g_optimizer)
+    train_comp.g_components.g_scheduler.step()
 
     g_losses = sch.GLosses(
                 alpha_loss=float(loss_alpha.item()),
@@ -167,7 +167,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
     Returns:
         sch.TrainLossValues: Updated loss_vals containing accumulated losses for the epoch.
     """
-    train_comp.generator.train()
+    train_comp.g_components.generator.train()
 
     if train_comp.use_gan_loss:
         train_comp.d_components.discriminator.train()
@@ -182,7 +182,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         mask = batch["mask"].to(train_comp.device, non_blocking=True) 
 
         with train_comp.amp_components.autocast:
-            alpha_pred = train_comp.generator(compos)
+            alpha_pred = train_comp.g_components.generator(compos)
 
         pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
 
@@ -224,7 +224,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         if (i + 1) % cfg.train.logging.log_lr_n_batches == 0:
             utl.log_lr(
                 step, 
-                train_comp.g_optimizer.param_groups[0]["lr"],
+                train_comp.g_components.g_optimizer.param_groups[0]["lr"],
                 "G",
                 train_comp.writer
             )

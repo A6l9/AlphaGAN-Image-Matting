@@ -37,7 +37,7 @@ def get_discriminator(device: tch.device) -> sch.DComponents:
     # Define optimizer and scheduler for the discriminator
     d_optimizer = optim.AdamW(discriminator.parameters(),
                             lr=float(cfg.train.D.scheduler.start_lr),
-                            weight_decay=float(cfg.train.D.optimizer.weight_decay)
+                            weight_decay=float(cfg.train.optimizer.weight_decay)
                             )
     d_scheduler = CyclicLR(
                         d_optimizer,
@@ -60,6 +60,45 @@ def get_discriminator(device: tch.device) -> sch.DComponents:
     return d_components
 
 
+def get_generator(device: tch.device) -> sch.GComponents:
+    """Build and configure the generator training components.
+
+    This helper creates a generator, moves it to the target device,
+    and initializes its optimizer and learning-rate scheduler.
+
+    Args:
+        device (tch.device): Device to run the generator on (e.g. CPU or CUDA).
+
+    Returns:
+        sch.GComponents: A container with the generator module, optimizer
+            and scheduler.
+    """
+    # Define generator
+    generator = mdl.AlphaGenerator()
+    generator.to(device)
+
+    # Define optimizer and scheduler for the generator
+    g_optimizer = optim.AdamW(generator.parameters(),
+                            lr=float(cfg.train.G.scheduler.start_lr),
+                            weight_decay=float(cfg.train.optimizer.weight_decay)
+                            )
+    g_scheduler = CyclicLR(
+                        g_optimizer,
+                        base_lr=float(cfg.train.G.scheduler.start_lr),
+                        max_lr=float(cfg.train.G.scheduler.end_lr), 
+                        step_size_up=cfg.train.G.scheduler.step_size_up,
+                        mode='triangular'
+                    )
+
+    g_components = sch.GComponents(
+        generator=generator,
+        g_optimizer=g_optimizer,
+        g_scheduler=g_scheduler
+    )
+    
+    return g_components
+
+
 def main(csv_path: Path) -> None:
     """Prepares components and setup the train loop
     
@@ -68,10 +107,6 @@ def main(csv_path: Path) -> None:
     """
     # Define an available device
     DEVICE = tch.device("cuda" if tch.cuda.is_available() else "cpu")
-    
-    # Define generator
-    generator = mdl.AlphaGenerator()
-    generator.to(DEVICE)
 
     transforms = TransformsPipeline()
 
@@ -93,19 +128,6 @@ def main(csv_path: Path) -> None:
         num_workers=utl.get_num_workers(),
         pin_memory=True
     )
-
-    # Define optimizer and scheduler for the generator
-    g_optimizer = optim.AdamW(generator.parameters(),
-                            lr=float(cfg.train.G.scheduler.start_lr),
-                            weight_decay=float(cfg.train.G.optimizer.weight_decay)
-                            )
-    g_scheduler = CyclicLR(
-                        g_optimizer,
-                        base_lr=float(cfg.train.G.scheduler.start_lr),
-                        max_lr=float(cfg.train.G.scheduler.end_lr), 
-                        step_size_up=cfg.train.G.scheduler.step_size_up,
-                        mode='triangular'
-                    )
     
     # Define the AMP
     amp_status = bool(cfg.train.amp.use_amp)
@@ -131,6 +153,9 @@ def main(csv_path: Path) -> None:
     # Initialize the discriminator
     d_components = get_discriminator(DEVICE)
 
+    # Initialize the generator
+    g_components = get_generator(DEVICE)
+
     # Define the best test loss. Default 'inf'
     best_loss = float("inf")
         
@@ -143,11 +168,11 @@ def main(csv_path: Path) -> None:
     if checkpoint:
         print(utl.color("Checkpoint found, loading states...", "green"))
 
-        generator.load_state_dict(checkpoint["model_state"])
+        g_components.generator.load_state_dict(checkpoint["model_state"])
 
-        g_optimizer.load_state_dict(checkpoint["g_optimizer_state"])
+        g_components.g_optimizer.load_state_dict(checkpoint["g_optimizer_state"])
 
-        g_scheduler.load_state_dict(checkpoint["g_scheduler_state"])
+        g_components.g_scheduler.load_state_dict(checkpoint["g_scheduler_state"])
 
         d_components.discriminator.load_state_dict(checkpoint["discriminator_state"])
 
@@ -167,18 +192,16 @@ def main(csv_path: Path) -> None:
         # Package it for train pipeline
         components = sch.TrainComponents(
             device=DEVICE,
-            generator=generator,
             epoch=curr_epoch,
             best_loss=best_loss,
             train_loader=train_dataloader,
             test_loader=test_dataloader,
-            g_optimizer=g_optimizer,
-            g_scheduler=g_scheduler,
             l_alpha_loss=l_alpha_loss,
             l_comp_loss=l_comp_loss,
             percept_loss=percept_loss,
             writer=writer,
             d_components=d_components,
+            g_components=g_components,
             amp_components=amp_components
         )
                                            

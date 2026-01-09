@@ -29,7 +29,7 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
     """
     print(utl.color("Testing...", "green"))
 
-    train_comp.generator.eval()
+    train_comp.g_components.generator.eval()
 
     n_batches = len(train_comp.test_loader)
 
@@ -43,7 +43,7 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
         mask = batch["mask"].to(train_comp.device, non_blocking=True)
 
         with train_comp.amp_components.autocast:
-            alpha_pred = train_comp.generator(compos)
+            alpha_pred = train_comp.g_components.generator(compos)
 
             pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
             
