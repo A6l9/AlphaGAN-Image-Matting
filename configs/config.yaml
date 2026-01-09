@@ -19,15 +19,13 @@ train:
       start_lr: 1e-5
       end_lr: 1.5e-4
       step_size_up: 4000
-    optimizer:
-      weight_decay: 5e-4
   G:
     scheduler:
       start_lr: 1e-3
       end_lr: 3e-4
       step_size_up: 4000
-    optimizer:
-      weight_decay: 5e-4
+  optimizer:
+    weight_decay: 5e-4
   logging:
     log_dir: tb_logger/
     log_io_n_batches: 10

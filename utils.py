@@ -134,9 +134,9 @@ def make_checkpoint_dict(epoch: int, components: TrainComponents) -> dict:
     checkpoint = {
         "epoch": epoch,
         "best_loss": components.best_loss,
-        "model_state": components.generator.state_dict(),
-        "g_optimizer_state": components.g_optimizer.state_dict(),
-        "g_scheduler_state": components.g_scheduler.state_dict(),
+        "model_state": components.g_components.generator.state_dict(),
+        "g_optimizer_state": components.g_components.g_optimizer.state_dict(),
+        "g_scheduler_state": components.g_components.g_scheduler.state_dict(),
         "discriminator_state": components.d_components.discriminator.state_dict(),
         "d_optimizer_state": components.d_components.d_optimizer.state_dict(),
         "d_scheduler_state": components.d_components.d_scheduler.state_dict()

@@ -28,21 +28,26 @@ class DComponents:
 
 
 @dataclass
+class GComponents:
+    generator: nn.Module
+    g_optimizer: optim.Optimizer
+    g_scheduler: lr.LRScheduler
+
+
+@dataclass
 class TrainComponents:
     device: tch.device
     epoch: int
     best_loss: float
     amp_components: AMPComponents
-    generator: nn.Module
     train_loader: DataLoader
     test_loader: DataLoader
-    g_optimizer: optim.Optimizer
-    g_scheduler: lr.LRScheduler
     l_alpha_loss: ls.BaseLoss
     l_comp_loss: ls.BaseLoss
     percept_loss: ls.BaseLoss
     writer: SummaryWriter
     d_components: DComponents
+    g_components: GComponents
     use_gan_loss: bool=True
 
 
