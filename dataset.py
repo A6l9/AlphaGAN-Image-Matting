@@ -180,6 +180,6 @@ if __name__ == "__main__":
 
     fg_path = Path(__file__).parent / "dataset" / "AIM-500"
     bg_path = Path(__file__).parent / "dataset" / "BG20K"
-    output_path = Path(__file__).parent / "dataset_labels.csv"
+    output_path = Path(__file__).parent / "dataset" / "dataset_labels.csv"
 
     prepare_labels(fg_path, bg_path, output_path)

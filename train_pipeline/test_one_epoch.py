@@ -42,18 +42,19 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
         fg = batch["orig"].to(train_comp.device, non_blocking=True)
         mask = batch["mask"].to(train_comp.device, non_blocking=True)
 
-        alpha_pred = train_comp.generator(compos)
+        with train_comp.amp_components.autocast:
+            alpha_pred = train_comp.generator(compos)
 
-        pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
-        
-        loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
-        loss_comp = train_comp.l_comp_loss(
-            alpha=alpha_pred, 
-            fg=fg,
-            bg=bg,
-            target=compos[:, :3]
-            )
-        percept_loss = train_comp.percept_loss(pred=pred_compos[:, :3], target=compos[:, :3])
+            pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
+            
+            loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
+            loss_comp = train_comp.l_comp_loss(
+                alpha=alpha_pred, 
+                fg=fg,
+                bg=bg,
+                target=compos[:, :3]
+                )
+            percept_loss = train_comp.percept_loss(pred=pred_compos[:, :3], target=compos[:, :3])
         
         # Logging current metrics every 'log_curr_mets_n_batches'
         if (i + 1) % cfg.test.logging.log_curr_mets_n_batches == 0:

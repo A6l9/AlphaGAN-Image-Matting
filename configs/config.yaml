@@ -13,17 +13,21 @@ train:
   use_gan_loss: 1
   save_chkp_n_epoches: 1
   crop_size: 256
-  scheduler:
-    D:
+  D:
+    update_n_batches: 1
+    scheduler:
       start_lr: 1e-5
       end_lr: 1.5e-4
       step_size_up: 4000
-    G:
+    optimizer:
+      weight_decay: 5e-4
+  G:
+    scheduler:
       start_lr: 1e-3
       end_lr: 3e-4
       step_size_up: 4000
-  optimizer:
-    weight_decay: 5e-4
+    optimizer:
+      weight_decay: 5e-4
   logging:
     log_dir: tb_logger/
     log_io_n_batches: 10
@@ -34,8 +38,12 @@ train:
     lambda_gan_g: 0.15
     lambda_alpha_g: 1.0
     lambda_comp_g: 1.0
+  amp:
+    use_amp: 1
+    dtype: bf16
+    use_grad_scaler: 0
 
 test:
-  resize_size: 256
+  crop_size: 256
   logging:
     log_curr_mets_n_batches: 1

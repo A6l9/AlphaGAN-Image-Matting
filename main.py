@@ -31,19 +31,19 @@ def get_discriminator(device: tch.device) -> sch.DComponents:
             scheduler, and GAN loss instance.
     """
     # Define the discriminator
-    discriminator = mdl.PatchGANDiscriminator(4, nn.BatchNorm2d)
+    discriminator = mdl.PatchGANDiscriminator(4, nn.BatchNorm2d, base_chann=12)
     discriminator.to(device)
 
     # Define optimizer and scheduler for the discriminator
     d_optimizer = optim.AdamW(discriminator.parameters(),
-                            lr=float(cfg.train.scheduler.D.start_lr),
-                            weight_decay=float(cfg.train.optimizer.weight_decay)
+                            lr=float(cfg.train.D.scheduler.start_lr),
+                            weight_decay=float(cfg.train.D.optimizer.weight_decay)
                             )
     d_scheduler = CyclicLR(
                         d_optimizer,
-                        base_lr=float(cfg.train.scheduler.D.start_lr),
-                        max_lr=float(cfg.train.scheduler.D.end_lr), 
-                        step_size_up=cfg.train.scheduler.D.step_size_up,
+                        base_lr=float(cfg.train.D.scheduler.start_lr),
+                        max_lr=float(cfg.train.D.scheduler.end_lr), 
+                        step_size_up=cfg.train.D.scheduler.step_size_up,
                         mode='triangular'
                     )
     
@@ -96,16 +96,27 @@ def main(csv_path: Path) -> None:
 
     # Define optimizer and scheduler for the generator
     g_optimizer = optim.AdamW(generator.parameters(),
-                            lr=float(cfg.train.scheduler.G.start_lr),
-                            weight_decay=float(cfg.train.optimizer.weight_decay)
+                            lr=float(cfg.train.G.scheduler.start_lr),
+                            weight_decay=float(cfg.train.G.optimizer.weight_decay)
                             )
     g_scheduler = CyclicLR(
                         g_optimizer,
-                        base_lr=float(cfg.train.scheduler.G.start_lr),
-                        max_lr=float(cfg.train.scheduler.G.end_lr), 
-                        step_size_up=cfg.train.scheduler.G.step_size_up,
+                        base_lr=float(cfg.train.G.scheduler.start_lr),
+                        max_lr=float(cfg.train.G.scheduler.end_lr), 
+                        step_size_up=cfg.train.G.scheduler.step_size_up,
                         mode='triangular'
                     )
+    
+    # Define the AMP
+    amp_status = bool(cfg.train.amp.use_amp)
+
+    autocast = utl.make_autocast(amp_status, DEVICE, cfg.train.amp.dtype)
+    grad_scaler = utl.make_grad_scaler(amp_status, DEVICE, cfg.train.amp.dtype, cfg.train.amp.use_grad_scaler)
+
+    amp_components = sch.AMPComponents(
+        autocast=autocast,
+        grad_scaler=grad_scaler
+    )
     
     # Define losses
     l_alpha_loss = ls.LAlphaLoss()
@@ -167,7 +178,8 @@ def main(csv_path: Path) -> None:
             l_comp_loss=l_comp_loss,
             percept_loss=percept_loss,
             writer=writer,
-            d_components=d_components
+            d_components=d_components,
+            amp_components=amp_components
         )
                                            
         if not cfg.train.use_gan_loss:

@@ -1,14 +1,22 @@
 import typing as tp
 from dataclasses import dataclass
+from contextlib import nullcontext
 
 import torch as tch
 import torch.nn as nn
 import torch.optim as optim
+from torch.amp.grad_scaler import GradScaler
 import torch.optim.lr_scheduler as lr
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import losses as ls
+
+
+@dataclass
+class AMPComponents:
+    autocast: tch.autocast | nullcontext
+    grad_scaler: GradScaler | None
 
 
 @dataclass
@@ -24,6 +32,7 @@ class TrainComponents:
     device: tch.device
     epoch: int
     best_loss: float
+    amp_components: AMPComponents
     generator: nn.Module
     train_loader: DataLoader
     test_loader: DataLoader
