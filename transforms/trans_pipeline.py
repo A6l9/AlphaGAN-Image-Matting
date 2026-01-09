@@ -87,7 +87,7 @@ class TransformsPipeline:
                                                                                                 mask_comp,
                                                                                                 orig_comp,
                                                                                                 bg_comp,
-                                                                                                cfg.test.resize_size
+                                                                                                cfg.test.crop_size
                                                                                                 )
 
         compos_trim = cls.compos_tfs.concat_image_and_trimap(compos_crop, trim_crop)

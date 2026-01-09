@@ -3,9 +3,10 @@ from datetime import datetime
 import typing as tp
 import multiprocessing as mp
 from pathlib import Path
-from contextlib import contextmanager
+import contextlib as ctxlb
 
 import torch as tch
+from torch.amp.grad_scaler import GradScaler
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 
@@ -23,7 +24,7 @@ COLORS = {
 }
 
 
-@contextmanager
+@ctxlb.contextmanager
 def set_seed(seed: int, use_cuda: bool=True) -> tp.Generator:
     """Temporarily sets RNG seeds for deterministic behavior.
 
@@ -390,3 +391,75 @@ def log_matting_inputs_outputs(
 
     grid = make_grid(tch.stack(images, dim=0), nrow=nrow)
     writer.add_image(f"image/{tag}", grid, global_step)
+
+
+
+def get_amp_dtype_from_str(dtype: str) -> tch.dtype:
+    """Convert a config string into a torch dtype used by AMP autocast.
+
+    Supported values:
+    - "bf16" -> torch.bfloat16
+    - "fp16" -> torch.float16
+
+    Args:
+        dtype: AMP dtype string from config.
+
+    Returns:
+        tch.dtype: The corresponding `tch.dtype` to pass into `tch.autocast`.
+
+    Raises:
+        ValueError: If `dtype` is not one of the supported values.
+    """
+    key = dtype.strip().lower()
+
+    if key == "bf16":
+        return tch.bfloat16
+    if key == "fp16":
+        return tch.float16
+    
+    raise ValueError(f"Unsupported AMP dtype: {dtype}. Use 'bf16' or 'fp16'.")
+
+
+def make_autocast(enabled: bool, device: tch.device, dtype: str) -> tch.autocast | ctxlb.nullcontext:
+    """Create an autocast context manager, or a no-op context when AMP is disabled.
+
+    Args:
+        enabled: Whether AMP is enabled in the config.
+        device: Target device used for training (must be CUDA for autocast to apply).
+        dtype: AMP dtype string ("bf16" or "fp16").
+
+    Returns:
+        tch.autocast | ctxlb.nullcontext: `nullcontext()` when AMP is disabled or the device is not CUDA
+                                          `torch.autocast(...)` otherwise
+    """
+    if not enabled or device.type != "cuda":
+        return ctxlb.nullcontext()
+    
+    return tch.autocast(device_type="cuda", dtype=get_amp_dtype_from_str(dtype))
+
+
+def make_grad_scaler(
+    enabled: bool,
+    device: tch.device,
+    dtype: str,
+    use_grad_scaler: bool,
+    ) -> GradScaler | None:
+    """Create a GradScaler when using fp16 AMP, otherwise return None.
+
+    Args:
+        enabled: Whether AMP is enabled in the config.
+        device: Target device used for training (must be CUDA for GradScaler).
+        dtype: AMP dtype string ("bf16" or "fp16").
+        use_grad_scaler: Whether to use GradScaler (usually True for fp16, False for bf16).
+
+    Returns:
+        GradScaler | None: `GradScaler` instance if fp16 scaling is enabled, otherwise None.
+    """
+    if not enabled or device.type != "cuda":
+        return None
+    if not use_grad_scaler:
+        return None
+    if dtype.strip().lower() != "fp16":
+        return None
+    
+    return GradScaler()
