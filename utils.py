@@ -75,16 +75,21 @@ def set_seed(seed: int, use_cuda: bool=True) -> tp.Generator:
         tch.backends.cudnn.benchmark = cudnn_bench
 
 
-def get_num_workers() -> int:
-    """Calculates the number of workers.
+def get_num_workers(reserve_cpus: int = 1, max_workers: int | None = None) -> int:
+    """Calculates a reasonable number of worker processes.
+
+    Args:
+        reserve_cpus: How many CPU cores to keep free.
+        max_workers: Optional upper bound for workers.
 
     Returns:
-        int: The number of workers
+        The number of workers to use (at least 1).
     """
-    num_cpu = mp.cpu_count()
-    num_workers = min(2, num_cpu)
-
-    return num_workers
+    cpu = mp.cpu_count()
+    workers = max(1, cpu - reserve_cpus)
+    if max_workers is not None:
+        workers = min(workers, max_workers)
+    return workers
 
 
 def load_checkpoint(chkp_dir: Path, device: tch.device) -> dict:
