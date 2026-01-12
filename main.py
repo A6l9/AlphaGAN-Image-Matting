@@ -145,6 +145,7 @@ def main(csv_path: Path) -> None:
     # Define losses
     l_alpha_loss = ls.LAlphaLoss()
     l_comp_loss = ls.LCompositeLoss()
+    l_lap_loss = ls.LAlphaLaplacianLoss(DEVICE)
 
     # Define features extractor and perceptual loss
     features_extractor = mdl.VGG(layer_indices=(3, 8, 13, 15), model_type="vgg16")
@@ -200,6 +201,7 @@ def main(csv_path: Path) -> None:
             test_loader=test_dataloader,
             l_alpha_loss=l_alpha_loss,
             l_comp_loss=l_comp_loss,
+            l_lap_loss=l_lap_loss,
             percept_loss=percept_loss,
             writer=writer,
             d_components=d_components,
