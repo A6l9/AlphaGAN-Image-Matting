@@ -36,6 +36,7 @@ train:
     lambda_gan_g: 0.15
     lambda_alpha_g: 1.0
     lambda_comp_g: 1.0
+    lambda_lap_g: 1.0
   amp:
     use_amp: 1
     dtype: bf16

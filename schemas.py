@@ -44,6 +44,7 @@ class TrainComponents:
     test_loader: DataLoader
     l_alpha_loss: ls.BaseLoss
     l_comp_loss: ls.BaseLoss
+    l_lap_loss: ls.BaseLoss
     percept_loss: ls.BaseLoss
     writer: SummaryWriter
     d_components: DComponents
@@ -69,6 +70,7 @@ class BaseLossValues:
 class TrainLossValues(BaseLossValues):
     l1_alpha_loss: float = 0.0
     l1_compos_loss: float = 0.0
+    l1_lap_loss: float = 0.0
     bce_fake_d_loss: float = 0.0
     bce_real_d_loss: float = 0.0
     d_loss: float = 0.0
@@ -91,4 +93,5 @@ class DLosses:
 class GLosses:
     alpha_loss: float
     compos_loss: float
+    laplasian_loss: float
     gan_loss: float = 0.0
