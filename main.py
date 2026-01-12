@@ -8,7 +8,9 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import models as mdl
-import utils as utl
+import utils.checkpointing as chkp_utl
+import utils.terminal_utils as term_utl
+import utils.train_utils as trn_utl
 from dataset import CustomDataset
 from cfg_loader import cfg
 from transforms import TransformsPipeline
@@ -116,7 +118,7 @@ def main(csv_path: Path) -> None:
         dataset_train,
         batch_size=cfg.general.batch_size,
         shuffle=True,
-        num_workers=utl.get_num_workers(),
+        num_workers=trn_utl.get_num_workers(),
         pin_memory=True
     )
 
@@ -125,15 +127,15 @@ def main(csv_path: Path) -> None:
         dataset_test,
         batch_size=cfg.general.batch_size,
         shuffle=False,
-        num_workers=utl.get_num_workers(),
+        num_workers=trn_utl.get_num_workers(),
         pin_memory=True
     )
     
     # Define the AMP
     amp_status = bool(cfg.train.amp.use_amp)
 
-    autocast = utl.make_autocast(amp_status, DEVICE, cfg.train.amp.dtype)
-    grad_scaler = utl.make_grad_scaler(amp_status, DEVICE, cfg.train.amp.dtype, cfg.train.amp.use_grad_scaler)
+    autocast = trn_utl.make_autocast(amp_status, DEVICE, cfg.train.amp.dtype)
+    grad_scaler = trn_utl.make_grad_scaler(amp_status, DEVICE, cfg.train.amp.dtype, cfg.train.amp.use_grad_scaler)
 
     amp_components = sch.AMPComponents(
         autocast=autocast,
@@ -163,10 +165,10 @@ def main(csv_path: Path) -> None:
     checkpoints_dir = Path(cfg.general.checkpoints_dir).absolute()
 
     # Load the last checkpoint
-    checkpoint = utl.load_checkpoint(checkpoints_dir, DEVICE)
+    checkpoint = chkp_utl.load_checkpoint(checkpoints_dir, DEVICE)
 
     if checkpoint:
-        print(utl.color("Checkpoint found, loading states...", "green"))
+        print(term_utl.color("Checkpoint found, loading states...", "green"))
 
         g_components.generator.load_state_dict(checkpoint["model_state"])
 
@@ -184,7 +186,7 @@ def main(csv_path: Path) -> None:
 
         curr_epoch = checkpoint["epoch"] + 1
     else:
-        print(utl.color("No checkpoint found, starting from scratch.", "green"))
+        print(term_utl.color("No checkpoint found, starting from scratch.", "green"))
         curr_epoch = 1
 
     # Create the tb logger
@@ -206,7 +208,7 @@ def main(csv_path: Path) -> None:
         )
                                            
         if not cfg.train.use_gan_loss:
-            print(utl.color("Selected a training without a discriminator", "yellow"))
+            print(term_utl.color("Selected a training without a discriminator", "yellow"))
 
             components.use_gan_loss = bool(cfg.train.use_gan_loss)
 

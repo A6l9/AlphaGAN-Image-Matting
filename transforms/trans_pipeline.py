@@ -1,10 +1,9 @@
 import torch as tch
 from PIL import Image
-import torchvision.transforms.v2 as T
 
 from cfg_loader import cfg
 from . import models
-import utils as utl
+import utils.train_utils as trn_utl
 
 
 class TransformsPipeline:
@@ -81,7 +80,7 @@ class TransformsPipeline:
         orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig, trim, mask, bg)
         compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.center_placement(orig_res, trim_res, mask_res, bg)
 
-        with utl.set_seed(cfg.general.random_seed, use_cuda=False):
+        with trn_utl.set_seed(cfg.general.random_seed, use_cuda=False):
             compos_crop, trim_crop, mask_crop, orig_crop, bg_crop = cls.crop_tfs.random_unknown_crop(compos, 
                                                                                                 trim_comp, 
                                                                                                 mask_comp,

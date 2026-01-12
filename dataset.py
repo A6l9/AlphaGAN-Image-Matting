@@ -5,10 +5,9 @@ from PIL import Image
 from pathlib import Path
 
 import pandas as pd
-import torch as tch
 from torch.utils.data import Dataset
 
-import utils as utl
+import utils.train_utils as trn_utl
 from cfg_loader import cfg
 from transforms import TransformsPipeline
 
@@ -122,7 +121,7 @@ def prepare_labels(fg_path: Path,
         output_path (Path): The output path to the csv file
         required_fg (list): The list of the names required directories
     """
-    with utl.set_seed(cfg.general.random_seed):
+    with trn_utl.set_seed(cfg.general.random_seed):
         if required_fg is None:
             required_fg = ["mask", "trimap", "original"]
             
