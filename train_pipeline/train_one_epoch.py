@@ -1,7 +1,8 @@
 import torch as tch
 from tqdm import tqdm
 
-import utils as utl
+import utils.tb_logging as tb_utl
+import utils.train_utils as trn_utl
 from cfg_loader import cfg
 import schemas as sch
 
@@ -55,7 +56,7 @@ def update_generator(
     loss_g_gan = 0.0
     
     if train_comp.use_gan_loss:
-        d_in_fake_for_g = utl.add_trimap(pred_compos, trim)
+        d_in_fake_for_g = trn_utl.add_trimap(pred_compos, trim)
 
         with train_comp.amp_components.autocast:
             d_fake_for_g = train_comp.d_components.discriminator(d_in_fake_for_g)
@@ -116,7 +117,7 @@ def update_discriminator(
     train_comp.d_components.d_optimizer.zero_grad(set_to_none=True)
 
     d_in_real = compos
-    d_in_fake = utl.add_trimap(pred_compos.detach(), trim)
+    d_in_fake = trn_utl.add_trimap(pred_compos.detach(), trim)
 
     with train_comp.amp_components.autocast:
         d_real = train_comp.d_components.discriminator(d_in_real)
@@ -184,7 +185,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         with train_comp.amp_components.autocast:
             alpha_pred = train_comp.g_components.generator(compos)
 
-        pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
+        pred_compos = trn_utl.make_compos(fg, mask, bg, alpha_pred)
 
         # Update D if train_comp.d_components != None and if a batch index % cfg.train.D.update_n_batches == 0
         if train_comp.use_gan_loss and (i + 1) % cfg.train.D.update_n_batches == 0:
@@ -211,18 +212,18 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         # Logging current G losses every 'log_curr_losses_n_batches'
         if (i + 1) % cfg.train.logging.log_curr_loss_n_batches == 0:
             for key, value in g_losses.__dict__.items():
-                utl.log_loss(step, value, f"curr_loss_train/G/{key}", train_comp.writer)
+                tb_utl.log_loss(step, value, f"curr_loss_train/G/{key}", train_comp.writer)
         
         # Check is D enabled or not
         if train_comp.use_gan_loss and (i + 1) % cfg.train.D.update_n_batches == 0:
             # Logging current D losses every 'log_curr_losses_n_batches'
             if (i + 1) % cfg.train.logging.log_curr_loss_n_batches == 0:
                 for key, value in d_losses.__dict__.items():
-                    utl.log_loss(step, value, f"curr_loss_train/D/{key}", train_comp.writer)
+                    tb_utl.log_loss(step, value, f"curr_loss_train/D/{key}", train_comp.writer)
 
         # Logging learning rates every 'log_lr_n_batches' batches
         if (i + 1) % cfg.train.logging.log_lr_n_batches == 0:
-            utl.log_lr(
+            tb_utl.log_lr(
                 step, 
                 train_comp.g_components.g_optimizer.param_groups[0]["lr"],
                 "G",
@@ -230,7 +231,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
             )
 
             if train_comp.use_gan_loss and (i + 1) % cfg.train.D.update_n_batches == 0:
-                utl.log_lr(
+                tb_utl.log_lr(
                 step, 
                 train_comp.d_components.d_optimizer.param_groups[0]["lr"],
                 "D",
@@ -239,7 +240,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         
         # Logging input/output images every 'save_io_n_batches' batches
         if (i + 1) % cfg.train.logging.log_io_n_batches == 0:
-            utl.log_matting_inputs_outputs(
+            tb_utl.log_matting_inputs_outputs(
                 compos[:, :3],
                 trim,
                 mask,
@@ -253,6 +254,6 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
     
     # Logging loss values
     for key, value in loss_vals.__dict__.items():
-        utl.log_loss(epoch, value / len(train_comp.train_loader), f"loss_train/{key}", train_comp.writer)
+        tb_utl.log_loss(epoch, value / len(train_comp.train_loader), f"loss_train/{key}", train_comp.writer)
     
     return loss_vals

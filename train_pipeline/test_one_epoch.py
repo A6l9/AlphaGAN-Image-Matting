@@ -1,6 +1,8 @@
 import torch as tch
 
-import utils as utl
+import utils.tb_logging as tb_utl
+import utils.train_utils as trn_utl
+import utils.terminal_utils as term_utl
 from cfg_loader import cfg
 import schemas as sch
 
@@ -27,7 +29,7 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
     Returns:
         sch.TestLossValues: Updated loss_vals containing accumulated losses for this validation epoch.
     """
-    print(utl.color("Testing...", "green"))
+    print(term_utl.color("Testing...", "green"))
 
     train_comp.g_components.generator.eval()
 
@@ -45,7 +47,7 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
         with train_comp.amp_components.autocast:
             alpha_pred = train_comp.g_components.generator(compos)
 
-            pred_compos = utl.make_compos(fg, mask, bg, alpha_pred)
+            pred_compos = trn_utl.make_compos(fg, mask, bg, alpha_pred)
             
             loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
             loss_comp = train_comp.l_comp_loss(
@@ -58,9 +60,9 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
         
         # Logging current metrics every 'log_curr_mets_n_batches'
         if (i + 1) % cfg.test.logging.log_curr_mets_n_batches == 0:
-            utl.log_loss(step, float(loss_alpha.item()), f"curr_mets_test/alpha_loss", train_comp.writer)
-            utl.log_loss(step, float(loss_comp.item()), f"curr_mets_test/compos_loss", train_comp.writer)
-            utl.log_loss(step, float(percept_loss.item()), f"curr_mets_test/percept_loss", train_comp.writer)
+            tb_utl.log_loss(step, float(loss_alpha.item()), f"curr_mets_test/alpha_loss", train_comp.writer)
+            tb_utl.log_loss(step, float(loss_comp.item()), f"curr_mets_test/compos_loss", train_comp.writer)
+            tb_utl.log_loss(step, float(percept_loss.item()), f"curr_mets_test/percept_loss", train_comp.writer)
 
         # Saving loss values
         loss_vals.l1_alpha_loss += float(loss_alpha.item())
@@ -69,7 +71,7 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
 
         # Logging input/output images every 'log_io_n_batches' batches
         if (i + 1) % cfg.train.logging.log_io_n_batches == 0:
-            utl.log_matting_inputs_outputs(
+            tb_utl.log_matting_inputs_outputs(
                 compos[:, :3],
                 trim,
                 mask,
@@ -83,6 +85,6 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
 
     # Logging loss values
     for key, value in loss_vals.__dict__.items():
-        utl.log_loss(epoch, value / n_batches, f"loss_test/{key}", train_comp.writer)
+        tb_utl.log_loss(epoch, value / n_batches, f"loss_test/{key}", train_comp.writer)
     
     return loss_vals

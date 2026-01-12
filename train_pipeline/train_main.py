@@ -2,7 +2,8 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-import utils as utl
+import utils.checkpointing as chkp_utl
+import utils.terminal_utils as term_utl
 from cfg_loader import cfg
 import schemas as sch
 from .test_one_epoch import test_one_epoch
@@ -54,7 +55,7 @@ def train_pipeline(train_comp: sch.TrainComponents) -> None:
 
         # Save checkpoint every 'save_chkp_n_epoches' batches  or if the loss was better
         if epoch % cfg.train.save_chkp_n_epoches == 0 or general_loss < train_comp.best_loss:
-            print(utl.color("Saving the checkpoint...", "green"))
+            print(term_utl.color("Saving the checkpoint...", "green"))
 
             chkp_dir = Path(cfg.general.checkpoints_dir).resolve()
 
@@ -66,11 +67,11 @@ def train_pipeline(train_comp: sch.TrainComponents) -> None:
                 train_comp.best_loss = general_loss
 
             if not cfg.general.colab.use_colab:
-                utl.save_checkpoint(chkp_dir, train_comp, epoch)
+                chkp_utl.save_checkpoint(chkp_dir, train_comp, epoch)
             elif cfg.general.colab.use_colab: # If using the colab the program execute another function for save checkpoint
-                print(utl.color("Using a way to save checkpoints with limited memory...", "green"))
+                print(term_utl.color("Using a way to save checkpoints with limited memory...", "green"))
 
                 if best:
-                    utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, cfg.general.colab.best_chkp_name)
+                    chkp_utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, cfg.general.colab.best_chkp_name)
 
-                utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, cfg.general.colab.last_chkp_name)
+                chkp_utl.save_checkpoint_use_colab(chkp_dir, train_comp, epoch, cfg.general.colab.last_chkp_name)
