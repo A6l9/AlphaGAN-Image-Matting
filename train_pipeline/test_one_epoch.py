@@ -70,7 +70,7 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
         loss_vals.percept_loss += float(percept_loss.item())
 
         # Logging input/output images every 'log_io_n_batches' batches
-        if (i + 1) % cfg.train.logging.log_io_n_batches == 0:
+        if (i + 1) % cfg.test.logging.log_io_n_batches == 0:
             tb_utl.log_matting_inputs_outputs(
                 compos[:, :3],
                 trim,

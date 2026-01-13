@@ -191,7 +191,7 @@ def main(csv_path: Path) -> None:
         curr_epoch = 1
 
     # Create the tb logger
-    with SummaryWriter(Path(cfg.train.logging.log_dir)) as writer:
+    with SummaryWriter(Path(cfg.general.log_dir)) as writer:
         # Package it for train pipeline
         components = sch.TrainComponents(
             device=DEVICE,

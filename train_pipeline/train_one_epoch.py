@@ -248,7 +248,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
                 train_comp.writer
             )
         
-        # Logging input/output images every 'save_io_n_batches' batches
+        # Logging input/output images every 'log_io_n_batches' batches
         if (i + 1) % cfg.train.logging.log_io_n_batches == 0:
             tb_utl.log_matting_inputs_outputs(
                 compos[:, :3],

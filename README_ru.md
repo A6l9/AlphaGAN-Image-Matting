@@ -152,6 +152,7 @@ general:
   std: [0.229, 0.224, 0.225]
   batch_size: 5
   checkpoints_dir: checkpoints/
+  log_dir: tb_logger/
   colab:
     use_colab: 0
     best_chkp_name: best_chkp
@@ -175,7 +176,6 @@ train:
   optimizer:
     weight_decay: 5e-4
   logging:
-    log_dir: tb_logger/
     log_io_n_batches: 10
     log_lr_n_batches: 50
     log_curr_loss_n_batches: 1
@@ -193,6 +193,7 @@ test:
   resize_size: 256
   logging:
     log_curr_mets_n_batches: 1
+    log_io_n_batches: 10
 ```
 
 ### Описание полей конфига
@@ -255,6 +256,8 @@ test:
   Размер кропа вокруг неизвестной (серой) области trimap(аналогично train.crop_size).
 - `logging.log_curr_mets_n_batches`  
   Частота логгирования метрик во время теста: раз в `N` батчей.
+- `logging.log_io_n_batches`  
+  Логгировать примеры входов/выходов каждые `N` батчей.
 
 Примечания:
 - Для обучения используются `AdamW` и `CyclicLR`.

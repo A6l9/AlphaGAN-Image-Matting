@@ -154,6 +154,7 @@ general:
   std: [0.229, 0.224, 0.225]
   batch_size: 5
   checkpoints_dir: checkpoints/
+  log_dir: tb_logger/
   colab:
     use_colab: 0
     best_chkp_name: best_chkp
@@ -177,7 +178,6 @@ train:
   optimizer:
     weight_decay: 5e-4
   logging:
-    log_dir: tb_logger/
     log_io_n_batches: 10
     log_lr_n_batches: 50
     log_curr_loss_n_batches: 1
@@ -195,6 +195,7 @@ test:
   resize_size: 256
   logging:
     log_curr_mets_n_batches: 1
+    log_io_n_batches: 10
 ```
 
 ### Config field descriptions
@@ -257,6 +258,8 @@ test:
   Resize size during testing.
 - `logging.log_curr_mets_n_batches`  
   Metric logging frequency during testing: once per `N` batches.
+- `logging.klog_io_n_batches`  
+    Log input/output examples every `N` batches.
 
 Notes:
 - Training uses `AdamW` and `CyclicLR`.

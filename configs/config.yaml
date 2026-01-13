@@ -4,6 +4,7 @@ general:
   std: [0.229, 0.224, 0.225]
   batch_size: 5
   checkpoints_dir: checkpoints/
+  log_dir: tb_logger/
   colab:
     use_colab: 0
     best_chkp_name: best_chkp
@@ -21,13 +22,12 @@ train:
       step_size_up: 4000
   G:
     scheduler:
-      start_lr: 1e-3
-      end_lr: 3e-4
+      start_lr: 1e-4
+      end_lr: 3e-3
       step_size_up: 4000
   optimizer:
     weight_decay: 5e-4
   logging:
-    log_dir: tb_logger/
     log_io_n_batches: 10
     log_lr_n_batches: 50
     log_curr_loss_n_batches: 1
@@ -46,3 +46,4 @@ test:
   crop_size: 256
   logging:
     log_curr_mets_n_batches: 1
+    log_io_n_batches: 10
