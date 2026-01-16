@@ -178,12 +178,19 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
     Returns:
         sch.TrainLossValues: Updated loss_vals containing accumulated losses for the epoch.
     """
+    # Declare a variable to count the batches of discriminator updates
+    d_n_batches = 0
+
     train_comp.g_components.generator.train()
 
     if train_comp.use_gan_loss:
         train_comp.d_components.discriminator.train()
 
     for i, batch in prog_bar:
+        # Make checks at the beginning of the cycle
+        do_update_d = train_comp.use_gan_loss and (i + 1) % cfg.train.D.update_n_batches == 0
+        do_log_curr_loss = (i + 1) % cfg.train.logging.log_curr_loss_n_batches == 0
+
         step = (epoch * len(train_comp.train_loader)) + i
 
         compos = batch["compos"].to(train_comp.device, non_blocking=True)
@@ -197,9 +204,12 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
 
         pred_compos = trn_utl.make_compos(fg, mask, bg, alpha_pred)
 
-        # Update D if train_comp.d_components != None and if a batch index % cfg.train.D.update_n_batches == 0
-        if train_comp.use_gan_loss and (i + 1) % cfg.train.D.update_n_batches == 0:
+        # Update D if do_update_d is true
+        if do_update_d:
             d_losses = update_discriminator(compos, pred_compos, trim, train_comp)
+
+            # Increase the variable when updating D
+            d_n_batches += 1 
 
         # Update G
         g_losses = update_generator(fg, bg, mask, compos, pred_compos, trim, alpha_pred, train_comp)
@@ -209,26 +219,29 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
             train_comp.amp_components.grad_scaler.update()
 
         # Saving loss values
-        loss_vals.l1_alpha_loss += g_losses.alpha_loss
-        loss_vals.l1_compos_loss += g_losses.compos_loss
-        loss_vals.l1_lap_loss += g_losses.laplasian_loss
+        loss_vals.g_losses.l1_alpha_loss += g_losses.alpha_loss
+        loss_vals.g_losses.l1_compos_loss += g_losses.compos_loss
+        loss_vals.g_losses.l1_lap_loss += g_losses.laplasian_loss
 
-        # Saving GAN and D losses if train_comp.d_components != None and if a batch index % cfg.train.D.update_n_batches == 0
-        if train_comp.use_gan_loss and (i + 1) % cfg.train.D.update_n_batches == 0:
-            loss_vals.g_loss += g_losses.gan_loss
-            loss_vals.bce_fake_d_loss += d_losses.loss_d_fake
-            loss_vals.bce_real_d_loss += d_losses.loss_d_real
-            loss_vals.d_loss += d_losses.loss_d
+        # Saving D losses if do_update_d is true
+        if do_update_d:
+            loss_vals.d_losses.bce_fake_d_loss += d_losses.loss_d_fake
+            loss_vals.d_losses.bce_real_d_loss += d_losses.loss_d_real
+            loss_vals.d_losses.d_loss += d_losses.loss_d
+        
+        # Accumulate adversarial loss for G when GAN is enabled
+        if train_comp.use_gan_loss:
+            loss_vals.g_losses.g_loss += g_losses.gan_loss
 
         # Logging current G losses every 'log_curr_losses_n_batches'
-        if (i + 1) % cfg.train.logging.log_curr_loss_n_batches == 0:
+        if do_log_curr_loss:
             for key, value in g_losses.__dict__.items():
                 tb_utl.log_loss(step, value, f"curr_loss_train/G/{key}", train_comp.writer)
         
         # Check is D enabled or not
-        if train_comp.use_gan_loss and (i + 1) % cfg.train.D.update_n_batches == 0:
+        if do_update_d:
             # Logging current D losses every 'log_curr_losses_n_batches'
-            if (i + 1) % cfg.train.logging.log_curr_loss_n_batches == 0:
+            if do_log_curr_loss:
                 for key, value in d_losses.__dict__.items():
                     tb_utl.log_loss(step, value, f"curr_loss_train/D/{key}", train_comp.writer)
 
@@ -241,7 +254,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
                 train_comp.writer
             )
 
-            if train_comp.use_gan_loss and (i + 1) % cfg.train.D.update_n_batches == 0:
+            if do_update_d:
                 tb_utl.log_lr(
                 step, 
                 train_comp.d_components.d_optimizer.param_groups[0]["lr"],
@@ -263,8 +276,15 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
                 train_comp.writer
             )
     
-    # Logging loss values
-    for key, value in loss_vals.__dict__.items():
+    # Logging G loss values
+    for key, value in loss_vals.g_losses.__dict__.items():
         tb_utl.log_loss(epoch, value / len(train_comp.train_loader), f"loss_train/{key}", train_comp.writer)
+
+    # Logging D loss values if it enabled
+    d_denom = max(d_n_batches, 1)
+
+    if train_comp.use_gan_loss:
+        for key, value in loss_vals.d_losses.__dict__.items():
+            tb_utl.log_loss(epoch, value / d_denom, f"loss_train/{key}", train_comp.writer)
     
     return loss_vals

@@ -66,15 +66,25 @@ class BaseLossValues:
             self.__dict__[key] = 0.0
 
 
-@dataclass 
-class TrainLossValues(BaseLossValues):
-    l1_alpha_loss: float = 0.0
-    l1_compos_loss: float = 0.0
-    l1_lap_loss: float = 0.0
+@dataclass
+class DLossValuesByEpoch(BaseLossValues):
     bce_fake_d_loss: float = 0.0
     bce_real_d_loss: float = 0.0
     d_loss: float = 0.0
+
+
+@dataclass
+class GLossValuesByEpoch(BaseLossValues):
+    l1_alpha_loss: float = 0.0
+    l1_compos_loss: float = 0.0
+    l1_lap_loss: float = 0.0
     g_loss: float = 0.0
+
+
+@dataclass 
+class TrainLossValues:
+    g_losses: GLossValuesByEpoch
+    d_losses: DLossValuesByEpoch
 
 
 @dataclass 

@@ -28,7 +28,10 @@ def train_pipeline(train_comp: sch.TrainComponents) -> None:
         - Updates train_comp.best_loss when validation loss improves.
         - Writes checkpoint files to cfg.general.checkpoints_dir.
     """
-    train_loss_vals = sch.TrainLossValues()
+    train_loss_vals = sch.TrainLossValues(
+        g_losses=sch.GLossValuesByEpoch(),
+        d_losses=sch.DLossValuesByEpoch()
+    )
     test_loss_vals = sch.TestLossValues()
 
     for epoch in range(train_comp.epoch, cfg.train.epoches + 1):
@@ -42,7 +45,8 @@ def train_pipeline(train_comp: sch.TrainComponents) -> None:
             train_loss_vals = train_one_epoch(epoch, train_loss_vals, train_comp, prog_bar)
 
         # Zeroing the train loss values
-        train_loss_vals.zeroing_loss_values()
+        for value in train_loss_vals.__dict__.values():
+            value.zeroing_loss_values()
 
         # Run the current epoch testing
         test_loss_vals = test_one_epoch(epoch, test_loss_vals, train_comp)
