@@ -55,7 +55,7 @@ def update_generator(
     
     # Calculate laplacian loss without autocast
     loss_lap = train_comp.l_lap_loss(
-        pred=alpha_pred,
+        pred=alpha_pred.to(tch.float32),
         target=mask,
         trimap=trim
     )
