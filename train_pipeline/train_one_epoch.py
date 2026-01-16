@@ -52,12 +52,13 @@ def update_generator(
             bg=bg,
             target=compos[:, :3]
             )
-        loss_lap = train_comp.l_lap_loss(
-            pred=alpha_pred,
-            target=mask,
-            trimap=trim
-        )
-        
+    
+    # Calculate laplacian loss without autocast
+    loss_lap = train_comp.l_lap_loss(
+        pred=alpha_pred,
+        target=mask,
+        trimap=trim
+    )
     
     loss_g_gan = 0.0
     
