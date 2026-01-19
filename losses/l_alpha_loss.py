@@ -1,23 +1,81 @@
 import torch as tch
-import torch.nn.functional as F
 
 from .base_loss import BaseLoss
 
 
 class LAlphaLoss(BaseLoss):
-    def __call__(self, pred: tch.Tensor, target: tch.Tensor) -> tch.Tensor:
-        """Compute alpha loss as an L1 distance between predicted and ground-truth alpha mattes.
+    def __init__(self, 
+                 unknown_val: float=128.0,
+                 unknown_weight: float | None=None,
+                 weighted_unknown: bool=False) -> None:
+        """Initialize alpha L1 loss, optionally upweighting the unknown (gray) trimap region.
 
-        This loss encourages the predicted alpha matte to be close to the ground-truth alpha
-        in a per-pixel sense.
+        By default, this loss computes a plain per-pixel L1 distance between predicted
+        and ground-truth alpha mattes. If `weighted_unknown=True`, the loss will assign a
+        larger weight to pixels belonging to the unknown region of the trimap.
 
         Args:
-            pred (tch.Tensor): Predicted alpha matte of shape (B, C, H, W) in the range [0, 1].
-            target (tch.Tensor): Ground-truth alpha matte with the same shape as `pred`.
+            unknown_val (float): The value used to represent the unknown (gray) class in the trimap.
+                Defaults: 128.0
+            unknown_weight Optional(float): Multiplier applied to unknown pixels.
+                Defaults: None
+            weighted_unknown (bool): If True, compute a weighted L1 loss that increases the contribution
+                of unknown pixels.
+                Defaults: False
+        """
+        super().__init__()
+
+        self.weighted_unknown = weighted_unknown
+
+        if self.weighted_unknown:
+            self.unknown_val = unknown_val / 255.0
+            self.unknown_weight = unknown_weight
+
+    def get_unknown_mask(self, trimap: tch.Tensor) -> tch.Tensor:
+        """Return a boolean mask selecting unknown pixels from the trimap.
+
+        This mask is True where trimap equals `self.unknown_val` and False elsewhere.
+
+        Args:
+            trimap (tch.Tensor): Trimap tensor of shape (B, 1, H, W).
 
         Returns:
-            tch.Tensor: Scalar tensor containing the L1 loss value between `pred` and `target`.
+            tch.Tensor: Boolean tensor mask of the same shape as trimap, where True indicates unknown pixels.
         """
-        loss = F.l1_loss(pred, target)
+        val = tch.tensor(self.unknown_val, device=trimap.device, dtype=trimap.dtype)
+        
+        return tch.isclose(trimap, val, atol=1e-4)
+
+    def __call__(self, 
+                 pred: tch.Tensor, 
+                 target: tch.Tensor, 
+                 trimap: tch.Tensor | None=None
+                 ) -> tch.Tensor:
+        """Compute alpha L1 loss, optionally upweighting the unknown trimap region.
+
+        If `weighted_unknown=False`, returns a plain mean absolute error.
+
+        If `weighted_unknown=True`, computes a weighted mean absolute error where unknown pixels
+        receive weight `unknown_weight` and all other pixels receive weight 1.
+
+        Args:
+            pred (tch.Tensor): Predicted alpha matte of shape (B, 1, H, W), range [0, 1].
+            target (tch.Tensor): Ground-truth alpha matte with the same shape as `pred`.
+            trimap (tch.Tensor): Trimap tensor required when `weighted_unknown=True`. Used to build the
+                unknown mask.
+
+        Returns:
+            tch.Tensor: Scalar tensor containing the (weighted) L1 alpha loss.
+        """
+        diff = (pred - target).abs()
+
+        if not self.weighted_unknown:
+            return diff.mean()
+        
+        unknown_mask = self.get_unknown_mask(trimap)
+
+        unknown_weights = tch.ones_like(diff) + unknown_mask * (self.unknown_weight - 1.0)
+
+        loss = (diff * unknown_weights).sum() / unknown_weights.sum().clamp_min(1.0)
 
         return loss
