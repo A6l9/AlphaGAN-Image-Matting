@@ -45,7 +45,7 @@ def update_generator(
     train_comp.g_components.g_optimizer.zero_grad(set_to_none=True)
 
     with train_comp.amp_components.autocast:
-        loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
+        loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask, trimap=trim)
         loss_comp = train_comp.l_comp_loss(
             alpha=alpha_pred, 
             fg=fg,
@@ -71,7 +71,7 @@ def update_generator(
             loss_g_gan = train_comp.d_components.gan_loss(pred=d_fake_for_g, is_real=True)
     
         # Calculate the weighted generator loss;
-        weighted_alpha = (loss_alpha * cfg.train.losses.lambda_alpha_g)
+        weighted_alpha = (loss_alpha * cfg.train.losses.alpha_loss.lambda_alpha_g)
         weighted_comp = (loss_comp * cfg.train.losses.lambda_comp_g)
         weighted_lap = (loss_lap * cfg.train.losses.lambda_lap_g)
         weighted_gan = (loss_g_gan * cfg.train.losses.lambda_gan_g)

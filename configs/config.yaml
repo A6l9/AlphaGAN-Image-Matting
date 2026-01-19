@@ -34,7 +34,10 @@ train:
   epoches: 5000
   losses:
     lambda_gan_g: 0.15
-    lambda_alpha_g: 1.0
+    alpha_loss:
+      lambda_alpha_g: 1.0
+      use_unknown_weighted: 1
+      unknown_weight: 4
     lambda_comp_g: 1.0
     lambda_lap_g: 1.0
   amp:

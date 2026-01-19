@@ -30,7 +30,7 @@ class TransformsPipeline:
             dict: The prepared composite, trimap, mask, foreground image and background
         """
         orig_rot, trim_rot, mask_rot = cls.geom_tfs.random_rotate(orig, trim, mask, prob=0.6)
-        orig_scl, trim_scl, mask_scl = cls.geom_tfs.random_scale(orig_rot, trim_rot, mask_rot, prob=0.6)
+        orig_scl, trim_scl, mask_scl = cls.geom_tfs.random_scale(orig_rot, trim_rot, mask_rot, scale=(1.1, 1.5), prob=0.6)
         orig_fl, trim_fl, mask_fl = cls.geom_tfs.random_hflip(orig_scl, trim_scl, mask_scl, prob=0.6)
 
         bg_res = cls.geom_tfs.random_background_scale(bg)
