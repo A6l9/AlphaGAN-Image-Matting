@@ -296,12 +296,14 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         # Logging random weights of D and G every `log_random_weigths_n_batches` batches
         if do_log_rand_weights:
             tb_utl.log_random_weights(train_comp.g_components.generator, train_comp.writer, step, "generator")
-            tb_utl.log_random_weights(train_comp.d_components.discriminator, train_comp.writer, step, "discriminator")
+            if train_comp.use_gan_loss and do_update_d:
+                tb_utl.log_random_weights(train_comp.d_components.discriminator, train_comp.writer, step, "discriminator")
         
         # Logging current gradients of D and G every `log_grad_n_batches` batches
         if do_log_grad:
             tb_utl.log_gradient(train_comp.g_components.generator, train_comp.writer, step, "generator")
-            tb_utl.log_gradient(train_comp.d_components.discriminator, train_comp.writer, step, "discriminator")
+            if train_comp.use_gan_loss and do_update_d:
+                tb_utl.log_gradient(train_comp.d_components.discriminator, train_comp.writer, step, "discriminator")
     
     # Logging G loss values
     for key, value in loss_vals.g_losses.__dict__.items():
