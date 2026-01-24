@@ -2,6 +2,9 @@ import torch as tch
 import torch.nn as nn
 from torchvision import models
 
+from transforms.models import NormalizeTransforms
+from cfg_loader import cfg
+
 
 class VGG(nn.Module):
     def __init__(self, layer_indices: tuple[int, ...], model_type: str="vgg19") -> None:
@@ -57,6 +60,8 @@ class VGG(nn.Module):
         Returns:
             A list of feature tensors captured at the requested layer indices.
         """
+        x = NormalizeTransforms.imgnet_normalize(x, cfg.general.mean, cfg.general.std)
+
         outputs = []
 
         for i, layer in enumerate(self.features):

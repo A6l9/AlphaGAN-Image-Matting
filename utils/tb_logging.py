@@ -5,33 +5,6 @@ from torchvision.utils import make_grid
 from cfg_loader import cfg
 
 
-@tch.no_grad()
-def denorm_imagenet_rgb(x: tch.Tensor) -> tch.Tensor:
-    """Undo ImageNet normalization for an RGB tensor.
-
-    This function applies the inverse of ImageNet-style normalization:
-
-        y = x * std + mean
-
-    where 'mean' and 'std' are taken from 'cfg.general.mean' and
-    'cfg.general.std'.
-
-    Args:
-        x (tch.Tensor): ImageNet-normalized RGB tensor in CHW format
-            (3, H, W). The tensor is expected to be on any device; mean/std
-            will be moved to 'x.device'.
-
-    Returns:
-        tch.Tensor: De-normalized RGB tensor in CHW format (3, H, W), float32.
-            Values are typically in the [0, 1] range if the original image was
-            scaled to [0, 1] before normalization.
-    """
-    mean = tch.tensor(cfg.general.mean).view(-1,1,1).to(x.device)
-    std = tch.tensor(cfg.general.std).view(-1,1,1).to(x.device)
-
-    return x * std + mean
-
-
 def log_loss(
             epoch: int,
             loss_value: float, 
@@ -124,10 +97,11 @@ def log_matting_inputs_outputs(
         return x
     
     images = [
-        denorm_imagenet_rgb(_to_3ch(compos_in)),
+        _to_3ch(compos_in),
         _to_3ch(trimap_in),
         _to_3ch(alpha_orig),
-        denorm_imagenet_rgb(_to_3ch(compos_out)),
+        
+        _to_3ch(compos_out),
         _to_3ch(trimap_out),
         _to_3ch(alpha_pred),
     ] 

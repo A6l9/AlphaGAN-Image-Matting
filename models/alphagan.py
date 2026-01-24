@@ -1,9 +1,10 @@
 import torch as tch
 import torch.nn as nn
-import torch.nn.functional as F
 import torchvision.models as models
 
 from .aspp import ASPP
+from transforms.models import NormalizeTransforms
+from cfg_loader import cfg
 
 
 class Encoder(nn.Module):
@@ -128,6 +129,8 @@ class AlphaGenerator(nn.Module):
         self.decoder = Decoder()
     
     def forward(self, x: tch.Tensor) -> tch.Tensor:
+        x = NormalizeTransforms.imgnet_normalize(x, cfg.general.mean, cfg.general.std)
+
         x, skip0, skip2 = self.encoder(x)
         x = self.aspp(x)
         x = self.decoder(x, skip0, skip2)
