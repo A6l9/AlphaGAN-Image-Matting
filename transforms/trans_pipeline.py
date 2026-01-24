@@ -46,11 +46,11 @@ class TransformsPipeline:
                                                                                             cfg.train.crop_size)
 
         compos_trim = cls.compos_tfs.concat_image_and_trimap(compos_crop, trim_crop)
-        compos_norm = cls.norm_tfs.normalize(compos_trim, imgnet=True)
+        compos_norm = cls.norm_tfs.normalize(compos_trim)
         mask_norm = cls.norm_tfs.normalize(mask_crop)
 
-        orig_norm = cls.norm_tfs.normalize(orig_crop, imgnet=True)
-        bg_norm = cls.norm_tfs.normalize(bg_crop, imgnet=True)
+        orig_norm = cls.norm_tfs.normalize(orig_crop)
+        bg_norm = cls.norm_tfs.normalize(bg_crop)
 
         return {
             "compos": compos_norm,
@@ -90,11 +90,11 @@ class TransformsPipeline:
                                                                                                 )
 
         compos_trim = cls.compos_tfs.concat_image_and_trimap(compos_crop, trim_crop)
-        compos_norm = cls.norm_tfs.normalize(compos_trim, imgnet=True)
+        compos_norm = cls.norm_tfs.normalize(compos_trim)
         mask_norm = cls.norm_tfs.normalize(mask_crop)
         
-        orig_norm = cls.norm_tfs.normalize(orig_crop, imgnet=True)
-        bg_norm = cls.norm_tfs.normalize(bg_crop, imgnet=True)
+        orig_norm = cls.norm_tfs.normalize(orig_crop)
+        bg_norm = cls.norm_tfs.normalize(bg_crop,)
 
         return {
             "compos": compos_norm,
