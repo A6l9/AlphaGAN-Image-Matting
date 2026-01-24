@@ -5,6 +5,7 @@ import contextlib as ctxlb
 
 import torch as tch
 from torch import nn
+import numpy as np
 from torch.amp.grad_scaler import GradScaler
 
 
@@ -13,7 +14,7 @@ def set_seed(seed: int, use_cuda: bool=True) -> tp.Generator:
     """Temporarily sets RNG seeds for deterministic behavior.
 
     This context manager saves and restores RNG states while temporarily setting the
-    random seed for Python's `random` and PyTorch CPU RNG. Optionally, it can also
+    random seed for Python's `random`, numpy's `random` and PyTorch CPU RNG. Optionally, it can also
     set and restore CUDA RNG states.
 
     Args:
@@ -27,6 +28,7 @@ def set_seed(seed: int, use_cuda: bool=True) -> tp.Generator:
         # Outside the block, RNG states are restored.
     """
     random_state = random.getstate()
+    np_random_state = np.random.get_state()
     torch_state = tch.get_rng_state()
     cuda_states = None
 
@@ -39,6 +41,7 @@ def set_seed(seed: int, use_cuda: bool=True) -> tp.Generator:
     cudnn_bench = tch.backends.cudnn.benchmark
 
     try:
+        np.random.seed(seed)
         random.seed(seed)
         tch.manual_seed(seed)
         if use_cuda:
@@ -51,6 +54,7 @@ def set_seed(seed: int, use_cuda: bool=True) -> tp.Generator:
 
     finally:
         random.setstate(random_state)
+        np.random.set_state(np_random_state)
         tch.set_rng_state(torch_state)
         if use_cuda and cuda_states is not None:
             tch.cuda.set_rng_state_all(cuda_states)

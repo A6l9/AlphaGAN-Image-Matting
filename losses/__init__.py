@@ -4,3 +4,4 @@ from .gan_loss import GANLoss
 from .base_loss import BaseLoss
 from .perceptual_loss import PerceptualLoss
 from .l_laplacian_loss import LAlphaLaplacianLoss
+from .l_grad_loss import LGradLoss

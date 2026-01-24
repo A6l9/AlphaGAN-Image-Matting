@@ -53,8 +53,13 @@ def update_generator(
             target=compos[:, :3]
             )
     
-    # Calculate laplacian loss without autocast
+    # Calculate grad and laplacian losses without autocast
     loss_lap = train_comp.l_lap_loss(
+        pred=alpha_pred.to(tch.float32),
+        target=mask,
+        trimap=trim
+    )
+    loss_grad = train_comp.l_grad_loss(
         pred=alpha_pred.to(tch.float32),
         target=mask,
         trimap=trim
@@ -81,15 +86,17 @@ def update_generator(
         weighted_comp = (loss_comp * cfg.train.losses.lambda_comp_g)
         weighted_lap = (loss_lap * cfg.train.losses.lambda_lap_g)
         weighted_gan = (loss_g_gan * cfg.train.losses.lambda_gan_g)
+        weighted_grad = (loss_grad * cfg.train.losses.lambda_grad_g)
 
-        loss_g = weighted_alpha + weighted_comp + weighted_gan + weighted_lap
+        loss_g = weighted_alpha + weighted_comp + weighted_gan + weighted_lap + weighted_grad
     else:
         # Calculate the weighted generator loss without the gan loss
         weighted_alpha = (loss_alpha * cfg.train.losses.lambda_alpha_g)
         weighted_comp = (loss_comp * cfg.train.losses.lambda_comp_g)
         weighted_lap = (loss_lap * cfg.train.losses.lambda_lap_g)
+        weighted_grad = (loss_grad * cfg.train.losses.lambda_grad_g)
 
-        loss_g = weighted_alpha + weighted_comp + weighted_lap
+        loss_g = weighted_alpha + weighted_comp + weighted_lap + weighted_grad
 
     # Do the backward step of the optimizer through the grad scaler if it is enabled
     if train_comp.amp_components.grad_scaler is None:
@@ -103,7 +110,8 @@ def update_generator(
     g_losses = sch.GLosses(
                 alpha_loss=float(loss_alpha.item()),
                 compos_loss=float(loss_comp.item()),
-                laplasian_loss=float(loss_lap.item())
+                laplasian_loss=float(loss_lap.item()),
+                grad_loss=float(loss_grad.item())
             )
     
     if train_comp.use_gan_loss:
@@ -196,6 +204,8 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         # Make checks at the beginning of the cycle
         do_update_d = train_comp.use_gan_loss and (i + 1) % cfg.train.D.update_n_batches == 0
         do_log_curr_loss = (i + 1) % cfg.train.logging.log_curr_loss_n_batches == 0
+        do_log_grad = (i + 1) % cfg.train.logging.log_grad_n_batches == 0
+        do_log_rand_weights = (i + 1) % cfg.train.logging.log_random_weights_n_batches == 0
 
         step = (epoch * len(train_comp.train_loader)) + i
 
@@ -228,6 +238,7 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         loss_vals.g_losses.l1_alpha_loss += g_losses.alpha_loss
         loss_vals.g_losses.l1_compos_loss += g_losses.compos_loss
         loss_vals.g_losses.l1_lap_loss += g_losses.laplasian_loss
+        loss_vals.g_losses.l1_grad_loss += g_losses.grad_loss
 
         # Saving D losses if do_update_d is true
         if do_update_d:
@@ -281,6 +292,16 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
                 step,
                 train_comp.writer
             )
+        
+        # Logging random weights of D and G every `log_random_weigths_n_batches` batches
+        if do_log_rand_weights:
+            tb_utl.log_random_weights(train_comp.g_components.generator, train_comp.writer, step, "generator")
+            tb_utl.log_random_weights(train_comp.d_components.discriminator, train_comp.writer, step, "discriminator")
+        
+        # Logging current gradients of D and G every `log_grad_n_batches` batches
+        if do_log_grad:
+            tb_utl.log_gradient(train_comp.g_components.generator, train_comp.writer, step, "generator")
+            tb_utl.log_gradient(train_comp.d_components.discriminator, train_comp.writer, step, "discriminator")
     
     # Logging G loss values
     for key, value in loss_vals.g_losses.__dict__.items():

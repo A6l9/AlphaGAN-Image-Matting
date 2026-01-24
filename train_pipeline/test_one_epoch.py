@@ -49,7 +49,7 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
 
             pred_compos = trn_utl.make_compos(fg, mask, bg, alpha_pred)
             
-            loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask)
+            loss_alpha = train_comp.l_alpha_loss(pred=alpha_pred, target=mask, trimap=trim)
             loss_comp = train_comp.l_comp_loss(
                 alpha=alpha_pred, 
                 fg=fg,

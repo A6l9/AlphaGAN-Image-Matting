@@ -30,7 +30,9 @@ train:
   logging:
     log_io_n_batches: 10
     log_lr_n_batches: 50
-    log_curr_loss_n_batches: 1
+    log_curr_loss_n_batches: 10
+    log_grad_n_batches: 10
+    log_random_weights_n_batches: 10
   epoches: 5000
   losses:
     lambda_gan_g: 0.15
@@ -40,6 +42,7 @@ train:
       unknown_weight: 4
     lambda_comp_g: 1.0
     lambda_lap_g: 1.0
+    lambda_grad_g: 1.0
   amp:
     use_amp: 1
     dtype: bf16
