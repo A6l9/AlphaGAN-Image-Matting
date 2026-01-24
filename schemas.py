@@ -45,6 +45,7 @@ class TrainComponents:
     l_alpha_loss: ls.BaseLoss
     l_comp_loss: ls.BaseLoss
     l_lap_loss: ls.BaseLoss
+    l_grad_loss: ls.BaseLoss
     percept_loss: ls.BaseLoss
     writer: SummaryWriter
     d_components: DComponents
@@ -78,6 +79,7 @@ class GLossValuesByEpoch(BaseLossValues):
     l1_alpha_loss: float = 0.0
     l1_compos_loss: float = 0.0
     l1_lap_loss: float = 0.0
+    l1_grad_loss: float = 0.0
     g_loss: float = 0.0
 
 
@@ -104,4 +106,5 @@ class GLosses:
     alpha_loss: float
     compos_loss: float
     laplasian_loss: float
+    grad_loss: float
     gan_loss: float = 0.0
