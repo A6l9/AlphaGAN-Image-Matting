@@ -4,6 +4,7 @@ import multiprocessing as mp
 import contextlib as ctxlb
 
 import torch as tch
+from torch import nn
 from torch.amp.grad_scaler import GradScaler
 
 
@@ -182,3 +183,15 @@ def make_grad_scaler(
         return None
     
     return GradScaler()
+
+
+def set_requires_grad(model: nn.Module, status: bool) -> None:
+    """Enable or disable gradient computation for all parameters of a module.
+
+    Args:
+        model (nn.Module): PyTorch module whose parameters will be updated.
+        status (bool): If True, enables gradients (requires_grad=True) for all parameters.
+            If False, disables gradients (requires_grad=False) for all parameters.
+    """
+    for par in model.parameters():
+        par.requires_grad_(status)

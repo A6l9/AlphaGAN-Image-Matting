@@ -63,12 +63,18 @@ def update_generator(
     loss_g_gan = 0.0
     
     if train_comp.use_gan_loss:
+        # Disable grad computation for the discriminator
+        trn_utl.set_requires_grad(train_comp.d_components.discriminator, status=False)
+
         d_in_fake_for_g = trn_utl.add_trimap(pred_compos, trim)
 
         with train_comp.amp_components.autocast:
             d_fake_for_g = train_comp.d_components.discriminator(d_in_fake_for_g)
 
             loss_g_gan = train_comp.d_components.gan_loss(pred=d_fake_for_g, is_real=True)
+        
+        # Enable grad computation for the discriminator after forward
+        trn_utl.set_requires_grad(train_comp.d_components.discriminator, status=True)
     
         # Calculate the weighted generator loss;
         weighted_alpha = (loss_alpha * cfg.train.losses.alpha_loss.lambda_alpha_g)
