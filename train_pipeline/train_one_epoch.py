@@ -91,7 +91,7 @@ def update_generator(
         loss_g = weighted_alpha + weighted_comp + weighted_gan + weighted_lap + weighted_grad
     else:
         # Calculate the weighted generator loss without the gan loss
-        weighted_alpha = (loss_alpha * cfg.train.losses.lambda_alpha_g)
+        weighted_alpha = (loss_alpha * cfg.train.losses.alpha_loss.lambda_alpha_g)
         weighted_comp = (loss_comp * cfg.train.losses.lambda_comp_g)
         weighted_lap = (loss_lap * cfg.train.losses.lambda_lap_g)
         weighted_grad = (loss_grad * cfg.train.losses.lambda_grad_g)
