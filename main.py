@@ -144,7 +144,7 @@ def main(csv_path: Path) -> None:
     
     # Define losses
     l_alpha_loss = ls.LAlphaLoss(
-        weighted_unknown=bool(cfg.train.losses.alpha_loss.use_weighted_option),
+        weighted=bool(cfg.train.losses.alpha_loss.use_weighted_option),
         unknown_weight=cfg.train.losses.alpha_loss.unknown_weight,
         bg_weight=cfg.train.losses.alpha_loss.bg_weight,
         fg_weight=cfg.train.losses.alpha_loss.fg_weight

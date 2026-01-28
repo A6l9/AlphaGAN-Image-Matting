@@ -9,13 +9,13 @@ class LAlphaLoss(BaseLoss):
                  unknown_weight: float | None=None,
                  bg_weight: float | None=None,
                  fg_weight: float | None=None,
-                 weighted_unknown: bool=False) -> None:
+                 weighted: bool=False) -> None:
         """Initialize alpha L1 loss with optional trimap region weighting.
 
         By default, this loss computes a plain per-pixel L1 distance between predicted
         and ground-truth alpha mattes.
 
-        If `weighted_unknown=True`, the loss builds a per-pixel weight map from the trimap
+        If `weighted=True`, the loss builds a per-pixel weight map from the trimap
         and computes a normalized weighted L1 loss. This allows you to control the relative
         importance of different trimap regions:
             - background region (trimap ~= 0.0) gets `bg_weight`
@@ -26,20 +26,20 @@ class LAlphaLoss(BaseLoss):
             unknown_val: Value representing the unknown (gray) region in the trimap using
                 the 0/128/255 convention. It is internally converted to [0, 1] by dividing
                 by 255.0.
-            unknown_weight: Weight multiplier for unknown pixels when `weighted_unknown=True`.
+            unknown_weight: Weight multiplier for unknown pixels when `weighted=True`.
                 If None, you must provide it before calling the loss in weighted mode.
-            bg_weight: Weight multiplier for known background pixels when `weighted_unknown=True`.
+            bg_weight: Weight multiplier for known background pixels when `weighted=True`.
                 If None, you must provide it before calling the loss in weighted mode.
-            fg_weight: Weight multiplier for known foreground pixels when `weighted_unknown=True`.
+            fg_weight: Weight multiplier for known foreground pixels when `weighted=True`.
                 If None, you must provide it before calling the loss in weighted mode.
-            weighted_unknown: If True, enables trimap-based region weighting. If False, the loss
+            weighted: If True, enables trimap-based region weighting. If False, the loss
                 reduces to a plain mean absolute error (MAE).
         """
         super().__init__()
 
-        self.weighted_unknown = weighted_unknown
+        self.weighted = weighted
 
-        if self.weighted_unknown:
+        if self.weighted:
             self.unknown_val: float = unknown_val / 255.0
             self.unknown_weight: float = unknown_weight
             self.bg_weight: float = bg_weight
@@ -97,10 +97,10 @@ class LAlphaLoss(BaseLoss):
                  ) -> tch.Tensor:
         """Compute alpha L1 loss, optionally weighted by trimap regions.
 
-        If `weighted_unknown` is disabled, this returns a plain mean absolute error (MAE)
+        If `weighted` is disabled, this returns a plain mean absolute error (MAE)
         over all pixels.
 
-        If `weighted_unknown` is enabled, this builds a per-pixel weight map from the trimap:
+        If `weighted` is enabled, this builds a per-pixel weight map from the trimap:
             - background pixels get weight `bg_weight`
             - unknown (gray) pixels get weight `unknown_weight`
             - foreground pixels get weight `fg_weight`
@@ -111,7 +111,7 @@ class LAlphaLoss(BaseLoss):
         Args:
             pred (tch.Tensor): Predicted alpha matte of shape (B, 1, H, W), values in [0, 1].
             target (tch.Tensor): Ground-truth alpha matte with the same shape as `pred`, values in [0, 1].
-            trimap (tch.Tensor | None): Trimap tensor required when `weighted_unknown` is enabled.
+            trimap (tch.Tensor | None): Trimap tensor required when `weighted` is enabled.
                 Expected shape (B, 1, H, W) and values in [0, 1], where:
                 - background is close to 0.0
                 - unknown is close to `unknown_val / 255.0`
@@ -121,15 +121,15 @@ class LAlphaLoss(BaseLoss):
             tch.Tensor: Scalar tensor containing the (weighted) L1 alpha loss.
 
         Raises:
-            ValueError: If `weighted_unknown` is enabled but `trimap` is None.
+            ValueError: If `weighted` is enabled but `trimap` is None.
         """
         diff = (pred - target).abs()
 
-        if not self.weighted_unknown:
+        if not self.weighted:
             return diff.mean()
         
         if trimap is None:
-            raise ValueError("Trimap must be provided when weighted_unknown=True.")
+            raise ValueError("Trimap must be provided when weighted=True.")
         
         unknown_mask = self.get_unknown_mask(trimap).to(diff.dtype)
         bg_mask = self.get_bg_mask(trimap).to(diff.dtype)

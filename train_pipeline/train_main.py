@@ -47,9 +47,14 @@ def train_pipeline(train_comp: sch.TrainComponents) -> None:
         # Zeroing the train loss values
         for value in train_loss_vals.__dict__.values():
             value.zeroing_loss_values()
+        
+        with tqdm(iterable=enumerate(train_comp.test_loader), 
+                  total=len(train_comp.test_loader), unit="batch", desc="Testing...", leave=True) as prog_bar:
 
-        # Run the current epoch testing
-        test_loss_vals = test_one_epoch(epoch, test_loss_vals, train_comp)
+            prog_bar.set_description(f"Testing... epoch: {epoch}")
+
+            # Run the current epoch testing
+            test_loss_vals = test_one_epoch(epoch, test_loss_vals, train_comp, prog_bar)
 
         # Calculate general test loss
         general_loss = test_loss_vals.percept_loss
