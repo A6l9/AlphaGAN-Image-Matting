@@ -149,7 +149,11 @@ def main(csv_path: Path) -> None:
         bg_weight=cfg.train.losses.alpha_loss.bg_weight,
         fg_weight=cfg.train.losses.alpha_loss.fg_weight
         )
-    l_comp_loss = ls.LCompositeLoss()
+    l_comp_loss = ls.LCompositeLoss(
+        weighted=bool(cfg.train.losses.compos_loss.use_weighted_option),
+        unknown_weight=cfg.train.losses.compos_loss.unknown_weight,
+        fg_weight=cfg.train.losses.compos_loss.fg_weight
+    )
     l_lap_loss = ls.LAlphaLaplacianLoss(DEVICE)
     l_grad_loss = ls.LGradLoss()
 
