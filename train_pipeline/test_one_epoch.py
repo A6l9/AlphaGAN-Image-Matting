@@ -54,7 +54,8 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
                 alpha=alpha_pred, 
                 fg=fg,
                 bg=bg,
-                target=compos[:, :3]
+                target=compos[:, :3],
+                trimap=trim
                 )
             percept_loss = train_comp.percept_loss(pred=pred_compos[:, :3], target=compos[:, :3])
         

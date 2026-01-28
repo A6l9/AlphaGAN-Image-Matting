@@ -42,7 +42,11 @@ train:
       unknown_weight: 4
       bg_weight: 4
       fg_weight: 4
-    lambda_comp_g: 1.0
+    compos_loss:
+      lambda_comp_g: 1.0
+      use_weighted_option: 1
+      unknown_weight: 4
+      fg_weight: 4
     lambda_lap_g: 1.0
     lambda_grad_g: 1.0
   amp:

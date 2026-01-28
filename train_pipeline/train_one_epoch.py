@@ -50,7 +50,8 @@ def update_generator(
             alpha=alpha_pred, 
             fg=fg,
             bg=bg,
-            target=compos[:, :3]
+            target=compos[:, :3],
+            trimap=trim
             )
     
     # Calculate grad and laplacian losses without autocast
@@ -83,7 +84,7 @@ def update_generator(
     
         # Calculate the weighted generator loss;
         weighted_alpha = (loss_alpha * cfg.train.losses.alpha_loss.lambda_alpha_g)
-        weighted_comp = (loss_comp * cfg.train.losses.lambda_comp_g)
+        weighted_comp = (loss_comp * cfg.train.losses.compos_loss.lambda_comp_g)
         weighted_lap = (loss_lap * cfg.train.losses.lambda_lap_g)
         weighted_gan = (loss_g_gan * cfg.train.losses.lambda_gan_g)
         weighted_grad = (loss_grad * cfg.train.losses.lambda_grad_g)
@@ -92,7 +93,7 @@ def update_generator(
     else:
         # Calculate the weighted generator loss without the gan loss
         weighted_alpha = (loss_alpha * cfg.train.losses.alpha_loss.lambda_alpha_g)
-        weighted_comp = (loss_comp * cfg.train.losses.lambda_comp_g)
+        weighted_comp = (loss_comp * cfg.train.losses.compos_loss.lambda_comp_g)
         weighted_lap = (loss_lap * cfg.train.losses.lambda_lap_g)
         weighted_grad = (loss_grad * cfg.train.losses.lambda_grad_g)
 
