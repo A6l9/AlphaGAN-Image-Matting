@@ -1,4 +1,5 @@
 import torch as tch
+from tqdm import tqdm
 
 import utils.tb_logging as tb_utl
 import utils.train_utils as trn_utl
@@ -8,7 +9,7 @@ import schemas as sch
 
 
 @tch.no_grad()
-def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.TrainComponents) -> sch.TestLossValues:
+def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.TrainComponents, prog_bar: tqdm) -> sch.TestLossValues:
     """Run one evaluation epoch.
 
     This function evaluates the generator on the test dataloader without gradient
@@ -25,17 +26,16 @@ def test_one_epoch(epoch: int, loss_vals: sch.TestLossValues, train_comp: sch.Tr
             to this object (as floats).
         train_comp: Training components container holding the generator, dataloaders,
             losses, device, and TensorBoard writer.
+        prog_bar: Progress bar iterator over the testing dataloader.
 
     Returns:
         sch.TestLossValues: Updated loss_vals containing accumulated losses for this validation epoch.
     """
-    print(term_utl.color("Testing...", "green"))
-
     train_comp.g_components.generator.eval()
 
     n_batches = len(train_comp.test_loader)
 
-    for i, batch in enumerate(train_comp.test_loader):
+    for i, batch in prog_bar:
         step = (epoch * len(train_comp.test_loader)) + i
 
         compos = batch["compos"].to(train_comp.device, non_blocking=True)
