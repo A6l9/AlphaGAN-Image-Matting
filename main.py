@@ -154,8 +154,6 @@ def main(csv_path: Path) -> None:
         unknown_weight=cfg.train.losses.compos_loss.unknown_weight,
         fg_weight=cfg.train.losses.compos_loss.fg_weight
     )
-    l_lap_loss = ls.LAlphaLaplacianLoss(DEVICE)
-    l_grad_loss = ls.LGradLoss()
 
     # Define features extractor and perceptual loss
     features_extractor = mdl.VGG(layer_indices=(3, 8, 13, 15), model_type="vgg16")
@@ -211,8 +209,6 @@ def main(csv_path: Path) -> None:
             test_loader=test_dataloader,
             l_alpha_loss=l_alpha_loss,
             l_comp_loss=l_comp_loss,
-            l_lap_loss=l_lap_loss,
-            l_grad_loss=l_grad_loss,
             percept_loss=percept_loss,
             writer=writer,
             d_components=d_components,
@@ -230,5 +226,5 @@ def main(csv_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    csv_path = Path(__file__).parent / "dataset" / "dataset_labels_short.csv"
+    csv_path = Path(__file__).parent / "dataset" / "dataset_labels.csv"
     main(csv_path)

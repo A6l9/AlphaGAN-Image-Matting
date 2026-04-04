@@ -1,145 +1,178 @@
+import numpy as np
 import torch as tch
 from PIL import Image
+import albumentations as A
 
 from cfg_loader import cfg
 from . import models
-import utils.train_utils as trn_utl
 
 
 class TransformsPipeline:
-    geom_tfs = models.GeometryTransforms
     compos_tfs = models.CompositingTransforms
-    crop_tfs = models.CropTransforms
     norm_tfs = models.NormalizeTransforms
 
+    albu_train = A.Compose(
+        [
+            A.OneOf(
+                [
+                    A.ColorJitter(brightness=(0.4, 1.8), contrast=(0.3, 1.8), saturation=(0.3, 1.8), hue=(-0.1, 0.4), p=1.0),
+                    A.RandomBrightnessContrast(brightness_limit=(-0.1, 0.2), contrast_limit=(-0.1, 0.2), p=1.0),
+                    A.HueSaturationValue(p=1.0),
+                    A.RandomGamma(gamma_limit=(70, 140), p=1.0),
+                ],
+                p=0.8,
+            ),
+            A.OneOf(
+                [
+                    A.GaussNoise(std_range=(0.01, 0.1), per_channel=True, p=1.0),
+                    A.ISONoise(color_shift=(0.01, 0.1), intensity=(0.1, 0.5), p=1.0),
+                ],
+                p=0.7,
+            ),
+            A.OneOf(
+                [
+                    A.MotionBlur(blur_limit=(2, 10), p=1.0),
+                    A.GaussianBlur(blur_limit=(2, 10), p=1.0),
+                ],
+                p=0.6,
+            ),
+            A.ImageCompression(quality_range=(75, 100), p=0.55),
+        ],
+        p=1.0,
+    )
+
+    albu_geom_train = A.Compose(
+        [
+            A.HorizontalFlip(p=0.6),
+            A.Resize(height=cfg.train.resize_size, width=cfg.train.resize_size, p=1.0)
+        ],
+        additional_targets={
+            "alpha": "image",
+            "trimap": "mask",
+        },
+        p=1.0,
+    )
+
+    albu_geom_test = A.Compose(
+        [
+            A.Resize(height=cfg.test.resize_size, width=cfg.test.resize_size, p=1.0)
+        ],
+        additional_targets={
+            "alpha": "image",
+            "trimap": "mask",
+        },
+        p=1.0,
+    )
+
+    albu_norm = A.Compose(
+        [
+            A.ToTensorV2()
+        ],
+        additional_targets={
+            "alpha": "image",
+            "trimap": "mask",
+        },
+        p=1.0,
+    )
+
     @classmethod
-    def build_train_sample(cls, orig: tch.Tensor, 
-                           trim: tch.Tensor, 
-                           mask: tch.Tensor, 
-                           bg: tch.Tensor
-                           ) -> dict:
-        """Builds a train sample and applies augmentations
+    def build_train_sample(cls, 
+                            orig: np.ndarray,
+                            trim: np.ndarray,
+                            mask: np.ndarray
+                            ) -> dict:
+        """Build a training sample with geometric and image-level augmentations.
 
         Args:
-            orig (tch.Tensor): Foreground image as a tensor
-            mask (tch.Tensor): Mask image as a tensor
-            trim (tch.Tensor): Trimap image as a tensor
-            bg (tch.Tensor): Background image as a tensor
-
-        Returns:
-            dict: The prepared composite, trimap, mask, foreground image and background
-        """
-        orig_rot, trim_rot, mask_rot = cls.geom_tfs.random_rotate(orig, trim, mask, prob=0.6)
-        orig_scl, trim_scl, mask_scl = cls.geom_tfs.random_scale(orig_rot, trim_rot, mask_rot, scale=(1.1, 1.5), prob=0.6)
-        orig_fl, trim_fl, mask_fl = cls.geom_tfs.random_hflip(orig_scl, trim_scl, mask_scl, prob=0.6)
-
-        bg_res = cls.geom_tfs.random_background_scale(bg)
-
-        orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig_fl, trim_fl, mask_fl, bg_res)
-        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.random_placement(orig_res, trim_res, mask_res, bg_res)
-
-        compos_crop, trim_crop, mask_crop, orig_crop, bg_crop = cls.crop_tfs.random_unknown_crop(compos, 
-                                                                                            trim_comp, 
-                                                                                            mask_comp,
-                                                                                            orig_comp,
-                                                                                            bg_comp,
-                                                                                            cfg.train.crop_size)
-
-        compos_trim = cls.compos_tfs.concat_image_and_trimap(compos_crop, trim_crop)
-        compos_norm = cls.norm_tfs.normalize(compos_trim)
-        mask_norm = cls.norm_tfs.normalize(mask_crop)
-
-        orig_norm = cls.norm_tfs.normalize(orig_crop)
-        bg_norm = cls.norm_tfs.normalize(bg_crop)
-
-        return {
-            "compos": compos_norm,
-            "trim": compos_norm[3:],
-            "mask": mask_norm,
-            "orig": orig_norm,
-            "bg": bg_norm
-        }
-
-    @classmethod
-    def build_test_sample(cls, orig: tch.Tensor, 
-                          trim: tch.Tensor, 
-                          mask: tch.Tensor, 
-                          bg: tch.Tensor
-                          ) -> dict:
-        """Builds a test sample without any augmentations
-
-        Args:
-            orig (tch.Tensor): Foreground image as a tensor
-            mask (tch.Tensor): Mask image as a tensor
-            trim (tch.Tensor): Trimap image as a tensor
-            bg (tch.Tensor): Background image as a tensor
-
-        Returns:
-            dict: The prepared orig, trimap and mask
-        """
-        orig_res, trim_res, mask_res = cls.geom_tfs.resize_to_fit_background(orig, trim, mask, bg)
-        compos, trim_comp, mask_comp, orig_comp, bg_comp = cls.compos_tfs.center_placement(orig_res, trim_res, mask_res, bg)
-
-        with trn_utl.set_seed(cfg.general.random_seed, use_cuda=False):
-            compos_crop, trim_crop, mask_crop, orig_crop, bg_crop = cls.crop_tfs.random_unknown_crop(compos, 
-                                                                                                trim_comp, 
-                                                                                                mask_comp,
-                                                                                                orig_comp,
-                                                                                                bg_comp,
-                                                                                                cfg.test.crop_size
-                                                                                                )
-
-        compos_trim = cls.compos_tfs.concat_image_and_trimap(compos_crop, trim_crop)
-        compos_norm = cls.norm_tfs.normalize(compos_trim)
-        mask_norm = cls.norm_tfs.normalize(mask_crop)
-        
-        orig_norm = cls.norm_tfs.normalize(orig_crop)
-        bg_norm = cls.norm_tfs.normalize(bg_crop,)
-
-        return {
-            "compos": compos_norm,
-            "trim": compos_norm[3:],
-            "mask": mask_norm,
-            "orig": orig_norm,
-            "bg": bg_norm
-        }
-    
-    @classmethod
-    def __call__(cls, orig: Image.Image, 
-                 trim: Image.Image, 
-                 mask: Image.Image, 
-                 bg: Image.Image,
-                 train: bool=True) -> dict:
-        """Full augmentation and compositing pipeline:
-
-        - converts all PIL images to tensors;
-        - applies random rotation, scale, and horizontal flip to the foreground
-          and corresponding trimap/mask;
-        - resizes the foreground to fit inside the background;
-        - composites foreground onto a random location on the background;
-        - performs a gray-region crop around unknown trimap area;
-        - normalizes the composite and scales the mask to [0, 1];
-        - concatenates trimap as an additional input channel.
-
-        Args:
-            orig (Image.Image): Foreground RGB PIL image.
-            trim (Image.Image): Trimap PIL image (mode "L").
-            mask (Image.Image): Mask PIL image (mode "L").
-            bg (Image.Image): Background RGB PIL image.
-            train (bool, optional): If True.
+            orig (np.ndarray): Input RGB image in HWC layout.
+            trim (np.ndarray): Input trimap aligned with the input image.
+            mask (np.ndarray): Input alpha mask aligned with the input image.
 
         Returns:
             dict: A dictionary with keys:
-                - "compos": tensor of shape (4, H, W) (RGB + trimap).
-                - "trim": full-size trimap tensor of shape (1, H, W).
-                - "mask": full-size mask tensor of shape (1, H, W) in [0, 1].
+                - "compos": normalized tensor of shape (4, H, W) with RGB image and trimap.
+                - "trim": normalized trimap tensor of shape (1, H, W).
+                - "mask": normalized alpha mask tensor of shape (1, H, W).
+                - "orig": normalized RGB tensor of shape (3, H, W).
         """
-        orig_ten = cls.norm_tfs.to_tensor(orig)
-        trim_ten = cls.norm_tfs.to_tensor(trim)
-        mask_ten = cls.norm_tfs.to_tensor(mask) 
-        bg_ten = cls.norm_tfs.to_tensor(bg)
+        geom_res = cls.albu_geom_train(image=orig, alpha=mask, trimap=trim)
+        orig_aug = cls.albu_train(image=geom_res["image"])["image"]
+        norm = cls.albu_norm(image=orig_aug, alpha=geom_res["alpha"], trimap=geom_res["trimap"])
+
+        compos_trim = cls.compos_tfs.concat_image_and_trimap(norm["image"], norm["trimap"])
+        compos_norm = cls.norm_tfs.normalize(compos_trim)
+        mask_norm = cls.norm_tfs.normalize(norm["alpha"])
+        orig_norm = cls.norm_tfs.normalize(norm["image"])
+
+        return {
+            "compos": compos_norm,
+            "trim": compos_norm[3:],
+            "mask": mask_norm,
+            "orig": orig_norm
+        }
+
+    @classmethod
+    def build_test_sample(cls, 
+                        orig: np.ndarray,
+                        trim: np.ndarray,
+                        mask: np.ndarray,
+                        ) -> dict:
+        """Build a test sample with deterministic preprocessing only.
+
+        Args:
+            orig (np.ndarray): Input RGB image in HWC layout.
+            trim (np.ndarray): Input trimap aligned with the input image.
+            mask (np.ndarray): Input alpha mask aligned with the input image.
+
+        Returns:
+            dict: A dictionary with keys:
+                - "compos": normalized tensor of shape (4, H, W) with RGB image and trimap.
+                - "trim": normalized trimap tensor of shape (1, H, W).
+                - "mask": normalized alpha mask tensor of shape (1, H, W).
+                - "orig": normalized RGB tensor of shape (3, H, W).
+        """
+        geom_res = cls.albu_geom_test(image=orig, alpha=mask, trimap=trim)
+        norm = cls.albu_norm(image=geom_res["image"], alpha=geom_res["alpha"], trimap=geom_res["trimap"])
+
+        compos_trim = cls.compos_tfs.concat_image_and_trimap(norm["image"], norm["trimap"])
+        compos_norm = cls.norm_tfs.normalize(compos_trim)
+        mask_norm = cls.norm_tfs.normalize(norm["alpha"])
+        orig_norm = cls.norm_tfs.normalize(norm["image"])
+
+        return {
+            "compos": compos_norm,
+            "trim": compos_norm[3:],
+            "mask": mask_norm,
+            "orig": orig_norm
+        }
+    
+    @classmethod
+    def __call__(cls, 
+                 orig: Image.Image, 
+                 trim: Image.Image, 
+                 mask: Image.Image,
+                 train: bool=True) -> dict:
+        """Run the full preprocessing pipeline for a single sample.
+
+        Args:
+            orig (Image.Image): Input RGB PIL image.
+            trim (Image.Image): Input trimap PIL image in grayscale mode.
+            mask (Image.Image): Input alpha mask PIL image in grayscale mode.
+            train (bool, optional): If True, apply training augmentations.
+                Otherwise, use deterministic test preprocessing. Defaults to True.
+
+        Returns:
+            dict: A dictionary with keys:
+                - "compos": normalized tensor of shape (4, H, W) with RGB image and trimap.
+                - "trim": normalized trimap tensor of shape (1, H, W).
+                - "mask": normalized alpha mask tensor of shape (1, H, W).
+                - "orig": normalized RGB tensor of shape (3, H, W).
+        """
+        orig_np = cls.norm_tfs.to_numpy(orig)
+        trim_np = cls.norm_tfs.to_numpy(trim)
+        mask_np = cls.norm_tfs.to_numpy(mask)
 
         if train:
-            return cls.build_train_sample(orig_ten, trim_ten, mask_ten, bg_ten)
+            return cls.build_train_sample(orig_np, trim_np, mask_np)
 
-        return cls.build_test_sample(orig_ten, trim_ten, mask_ten, bg_ten)
+        return cls.build_test_sample(orig_np, trim_np, mask_np)

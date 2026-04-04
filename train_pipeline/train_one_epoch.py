@@ -54,18 +54,6 @@ def update_generator(
             trimap=trim
             )
     
-    # Calculate grad and laplacian losses without autocast
-    loss_lap = train_comp.l_lap_loss(
-        pred=alpha_pred.to(tch.float32),
-        target=mask,
-        trimap=trim
-    )
-    loss_grad = train_comp.l_grad_loss(
-        pred=alpha_pred.to(tch.float32),
-        target=mask,
-        trimap=trim
-    )
-    
     loss_g_gan = 0.0
     
     if train_comp.use_gan_loss:
@@ -85,19 +73,15 @@ def update_generator(
         # Calculate the weighted generator loss;
         weighted_alpha = (loss_alpha * cfg.train.losses.alpha_loss.lambda_alpha_g)
         weighted_comp = (loss_comp * cfg.train.losses.compos_loss.lambda_comp_g)
-        weighted_lap = (loss_lap * cfg.train.losses.lambda_lap_g)
         weighted_gan = (loss_g_gan * cfg.train.losses.lambda_gan_g)
-        weighted_grad = (loss_grad * cfg.train.losses.lambda_grad_g)
 
-        loss_g = weighted_alpha + weighted_comp + weighted_gan + weighted_lap + weighted_grad
+        loss_g = weighted_alpha + weighted_comp + weighted_gan
     else:
         # Calculate the weighted generator loss without the gan loss
         weighted_alpha = (loss_alpha * cfg.train.losses.alpha_loss.lambda_alpha_g)
         weighted_comp = (loss_comp * cfg.train.losses.compos_loss.lambda_comp_g)
-        weighted_lap = (loss_lap * cfg.train.losses.lambda_lap_g)
-        weighted_grad = (loss_grad * cfg.train.losses.lambda_grad_g)
 
-        loss_g = weighted_alpha + weighted_comp + weighted_lap + weighted_grad
+        loss_g = weighted_alpha + weighted_comp
 
     # Do the backward step of the optimizer through the grad scaler if it is enabled
     if train_comp.amp_components.grad_scaler is None:
@@ -110,9 +94,7 @@ def update_generator(
 
     g_losses = sch.GLosses(
                 alpha_loss=float(loss_alpha.item()),
-                compos_loss=float(loss_comp.item()),
-                laplasian_loss=float(loss_lap.item()),
-                grad_loss=float(loss_grad.item())
+                compos_loss=float(loss_comp.item())
             )
     
     if train_comp.use_gan_loss:
@@ -238,8 +220,6 @@ def train_one_epoch(epoch: int, loss_vals: sch.TrainLossValues, train_comp: sch.
         # Saving loss values
         loss_vals.g_losses.l1_alpha_loss += g_losses.alpha_loss
         loss_vals.g_losses.l1_compos_loss += g_losses.compos_loss
-        loss_vals.g_losses.l1_lap_loss += g_losses.laplasian_loss
-        loss_vals.g_losses.l1_grad_loss += g_losses.grad_loss
 
         # Saving D losses if do_update_d is true
         if do_update_d:

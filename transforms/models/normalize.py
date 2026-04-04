@@ -1,24 +1,24 @@
 import torch as tch
 from PIL import Image
+import numpy as np
 import torchvision.transforms.functional as TF
 
 from .base import BaseTransform
-from cfg_loader import cfg
 
 
 class NormalizeTransforms(BaseTransform):
     @staticmethod
-    def to_tensor(x: Image.Image) -> tch.Tensor:
+    def to_numpy(x: Image.Image) -> np.ndarray:
         """
-        Converts a PIL image to a torch tensor in (C, H, W) layout.
+        Convert a PIL image to a numpy array.
 
         Args:
             x (Image.Image): Input PIL image.
 
         Returns:
-            tch.Tensor: Image tensor of shape (C, H, W) with dtype uint8.
+            np.ndarray: Image array with the same spatial layout as the input image.
         """
-        return TF.pil_to_tensor(x)
+        return np.asarray(x)
     
     @classmethod
     def normalize(cls,

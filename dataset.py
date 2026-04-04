@@ -13,63 +13,74 @@ from transforms import TransformsPipeline
 
 
 class CustomDataset(Dataset):
-    def __init__(self, csv_path: Path, transforms: TransformsPipeline, train: bool=False) -> None:
+    def __init__(self, csv_path: Path, transforms: TransformsPipeline, train: bool = False) -> None:
+        """
+        Initialize the dataset from a CSV file and select the requested split.
+
+        Args:
+            csv_path (Path): Path to the CSV file containing dataset paths and split labels.
+            transforms (TransformsPipeline): Transformation pipeline applied to loaded samples.
+            train (bool): If True, use the 'train' split. Otherwise, use the 'test' split.
+        """
         self.train = train
         split = "train" if self.train else "test"
         paths = pd.read_csv(csv_path)
         self.compos_paths = paths[paths["split"] == split].reset_index(drop=True)
         self.transforms = transforms
-    
-    def load_images(self, 
-                  orig_path: Path, 
-                  trim_path: Path,
-                  msk_path: Path, 
-                  bg_path: Path) -> tuple[Image.Image, Image.Image, Image.Image, Image.Image]:
+
+    def load_images(
+        self,
+        orig_path: Path,
+        trim_path: Path,
+        msk_path: Path,
+    ) -> tuple[Image.Image, ...]:
         """
-        Loads the foreground (orig), trimap, mask, and background images.
+        Load the original image, trimap, and ground-truth mask from disk.
 
         Args:
-            orig_path (Path): Path to the original RGB foreground image.
-            trim_path (Path): Path to the trimap (L mode).
-            msk_path (Path): Path to the mask (L mode).
-            bg_path (Path): Path to the background RGB image.
+            orig_path (Path): Path to the original RGB image.
+            trim_path (Path): Path to the trimap image in grayscale mode.
+            msk_path (Path): Path to the target mask image in grayscale mode.
 
         Returns:
-            tuple[Image.Image, Image.Image, Image.Image, Image.Image]:
-                (orig, trim, mask, bg) PIL images.
+            A tuple containing:
+            - the original image in 'RGB' mode
+            - the trimap in 'L' mode
+            - the mask in 'L' mode
         """
         orig = Image.open(orig_path).convert("RGB")
         trim = Image.open(trim_path).convert("L")
         mask = Image.open(msk_path).convert("L")
-        bg = Image.open(bg_path).convert("RGB")
 
-        return orig, trim, mask, bg
+        return orig, trim, mask
 
     def __len__(self) -> int:
+        """
+        Return the number of samples in the selected split.
+        """
         return len(self.compos_paths)
-    
+
     def __getitem__(self, index: int) -> dict:
-        """Takes an index of image paths and then build test/train sample. 
+        """
+        Load one sample, apply transforms, and return the processed result.
 
         Args:
-            index (int): The index of image paths from a csv file.
+            index (int): Index of the sample in the selected split.
 
         Returns:
-            dict: The composite and the mask as tensors into a dictionary
+            A dictionary produced by the transformation pipeline.
         """
         row = self.compos_paths.iloc[index]
-        
+
         orig = Path(row["original"])
         trim = Path(row["trimap"])
         mask = Path(row["mask"])
-        bg = Path(row["background"])
 
-        orig, trim, mask, bg = self.load_images(orig, trim, mask, bg)
+        orig, trim, mask = self.load_images(orig, trim, mask)
 
-        result = self.transforms(orig, trim, mask, bg, train=self.train)
+        result = self.transforms(orig, trim, mask, train=self.train, prepared=self.prepared_dataset)
 
         return result
-
 
 def check_dirs(path: Path, required: list[str]) -> bool:
     """Checks required dirs
@@ -107,55 +118,45 @@ def unpack_dir(path: Path, recur: bool=False) -> dict:
         return images
 
 
-def prepare_labels(fg_path: Path,
-                   bg_path: Path,
-                   output_path: Path,
-                   required_fg: list[str] | None=None,
-                   test_ratio: float=0.2
-                   ) -> None:
-    """Create random composite pairs from foregrounds and backgrounds and save them to a CSV file.
+def prepare_dataset_labels(
+      dataset_path: Path,
+      output_path: Path,
+      test_ratio: float = 0.2,
+  ) -> None:
+      rows = []
+      for part_dir in dataset_path.iterdir():
+        for sample_dir in sorted(p for p in part_dir.iterdir() if p.is_dir()):
+            compos_dir = sample_dir / "composite_crops"
+            alpha_dir = sample_dir / "alpha_crops"
+            trimap_dir = sample_dir / "trimap_crops"
 
-    Args:
-        fg_path (Path): The path to the foreground images, their masks and trimaps
-        bg_path (Path): The path to the background images
-        output_path (Path): The output path to the csv file
-        required_fg (list): The list of the names required directories
-    """
-    with trn_utl.set_seed(cfg.general.random_seed):
-        if required_fg is None:
-            required_fg = ["mask", "trimap", "original"]
-            
-        if not check_dirs(fg_path, required_fg):
-            raise FileNotFoundError(f"The directories [{required_fg}] are required")
-        
-        fg_masks = unpack_dir(fg_path / required_fg[0])
-        fg_trimaps = unpack_dir(fg_path / required_fg[1])
-        fg_origs = unpack_dir(fg_path / required_fg[2])
+            if not compos_dir.is_dir() or not alpha_dir.is_dir() or not trimap_dir.is_dir():
+                continue
 
-        backgrounds = unpack_dir(bg_path, recur=True)
-        
-        rows = []
+            compos_map = {p.name: p for p in compos_dir.glob("*.png")}
+            alpha_map = {p.name: p for p in alpha_dir.glob("*.png")}
+            trimap_map = {p.name: p for p in trimap_dir.glob("*.png")}
 
-        for bg in backgrounds:
-            orig = random.choice(list(fg_origs.keys()))
-            if fg_masks.get(orig) and fg_trimaps.get(orig):
-                orig_pth = fg_origs.get(orig)
-                trim_pth = fg_trimaps.get(orig)
-                msk_pth = fg_masks.get(orig)
-                bg_pth = backgrounds.get(bg)
+            common_names = sorted(compos_map.keys() & alpha_map.keys() & trimap_map.keys())
 
-                rows.append([str(orig_pth), str(trim_pth), str(msk_pth), str(bg_pth)])
+            for name in common_names:
+                rows.append([
+                    str(compos_map[name]),
+                    str(trimap_map[name]),
+                    str(alpha_map[name]),
+                ])
 
-        random.shuffle(rows)
-        split_idx = int(len(rows) * (1 - test_ratio))
-        train_set = list(map(lambda x: x + ["train"], rows[:split_idx]))
-        test_set = list(map(lambda x: x + ["test"], rows[split_idx:]))
-        train_set.extend(test_set)
+      rng = random.Random(cfg.general.random_seed)
+      rng.shuffle(rows)
 
-        with output_path.open("w", newline="", encoding="utf-8") as fp:
-            writer = csv.writer(fp)
-            writer.writerow(["original", "trimap", "mask", "background", "split"])
-            writer.writerows(train_set)
+      split_idx = int(len(rows) * (1 - test_ratio))
+      train_rows = [row + ["train"] for row in rows[:split_idx]]
+      test_rows = [row + ["test"] for row in rows[split_idx:]]
+
+      with output_path.open("w", newline="", encoding="utf-8") as fp:
+          writer = csv.writer(fp)
+          writer.writerow(["original", "trimap", "mask", "split"])
+          writer.writerows(train_rows + test_rows)
 
 
 def unpack_archives(arch_path: Path, dst_path: Path) -> None:
@@ -170,15 +171,12 @@ def unpack_archives(arch_path: Path, dst_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    fg_zip_path = Path(__file__).parent / "dataset" / "AIM-500-20251030T115928Z-1-001.zip"
-    bg_zip_path = Path(__file__).parent / "dataset" / "archive.zip"
+    dt_path = Path(__file__).parent / "dataset" / "IMDatasetTiled.zip"
     dst_path = Path(__file__).parent / "dataset"
 
-    unpack_archives(fg_zip_path, dst_path)
-    unpack_archives(bg_zip_path, dst_path)
+    unpack_archives(dt_path, dst_path)
 
-    fg_path = Path(__file__).parent / "dataset" / "AIM-500"
-    bg_path = Path(__file__).parent / "dataset" / "BG20K"
+    dt_path = Path(__file__).parent / "dataset" / "IMDatasetTiled"
     output_path = Path(__file__).parent / "dataset" / "dataset_labels.csv"
 
-    prepare_labels(fg_path, bg_path, output_path)
+    prepare_dataset_labels(dt_path, output_path)

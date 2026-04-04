@@ -13,7 +13,7 @@ general:
 train:
   use_gan_loss: 1
   save_chkp_n_epoches: 1
-  crop_size: 256
+  resize_size: 256
   D:
     update_n_batches: 1
     scheduler:
@@ -47,15 +47,13 @@ train:
       use_weighted_option: 1
       unknown_weight: 4
       fg_weight: 4
-    lambda_lap_g: 1.0
-    lambda_grad_g: 1.0
   amp:
     use_amp: 1
     dtype: bf16
     use_grad_scaler: 0
 
 test:
-  crop_size: 256
+  resize_size: 256
   logging:
     log_curr_mets_n_batches: 1
     log_io_n_batches: 10
